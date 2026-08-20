@@ -8,7 +8,7 @@
   <visual>
     <headlight diffuse="0.3 0.3 0.3" ambient="0.35 0.35 0.35" specular="0 0 0"/>
     <rgba haze="0.15 0.25 0.35 1"/>
-    <global azimuth="150" elevation="-20" offwidth="640" offheight="480"/>
+    <global azimuth="150" elevation="-20" offwidth="1600" offheight="1200"/>
   </visual>
 
   <asset>

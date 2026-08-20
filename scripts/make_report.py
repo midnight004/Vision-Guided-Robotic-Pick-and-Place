@@ -37,6 +37,12 @@ def build_content():
     a({"type": "p", "text":
        "Each episode draws a randomized mix of known-color and unknown-color products, in random "
        "order and orientation, so no two runs are identical."})
+    a({"type": "image", "path": "docs/figures/fig_pipeline.png", "width_in": 6.3,
+       "caption": "Figure 1. Pick-and-place pipeline architecture: perception stages (blue) and "
+                  "control stages (green), with the per-item feedback loop."})
+    a({"type": "image", "path": "docs/figures/fig_overview.png", "width_in": 6.0,
+       "caption": "Figure 2. The simulation cell: Franka Emika Panda, conveyor, work table, and "
+                  "the five sorting bins."})
 
     a({"type": "h1", "text": "2. Technology Stack"})
     a({"type": "table",
@@ -114,6 +120,9 @@ def build_content():
     a({"type": "p", "text":
        "An equality block defines 14 weld constraints (hand to each object), inactive by default "
        "and activated at runtime only when the gripper closes on an object."})
+    a({"type": "image", "path": "docs/figures/fig_bins.png", "width_in": 6.0,
+       "caption": "Figure 3. The five sorting bins with the TRASH label and the RABAH nameplate "
+                  "on the robot base; a red box and a green sphere have been correctly sorted."})
 
     a({"type": "h1", "text": "6. Perception: Detection and Color Classification"})
     a({"type": "p", "text":
@@ -141,6 +150,9 @@ def build_content():
        "unknown. That category, not the object's true identity, decides the destination bin, which "
        "is what lets the arm send a novel purple or orange item to trash. During perception the arm "
        "moves to a scan pose so it does not occlude the camera."})
+    a({"type": "image", "path": "docs/figures/fig_detection.png", "width_in": 5.2,
+       "caption": "Figure 4. Overhead detection with per-object color classification and "
+                  "confidence scores."})
 
     a({"type": "h1", "text": "7. 3D Localization"})
     a({"type": "p", "text":
@@ -196,6 +208,9 @@ def build_content():
        "This is genuine constraint-based physics, not a teleport or attach hack, and it is the "
        "standard technique in MuJoCo manipulation research. It eliminates the slipping and lag that "
        "pure friction grasping produced for small objects during motion."})
+    a({"type": "image", "path": "docs/figures/fig_action.png", "width_in": 6.0,
+       "caption": "Figure 5. The arm holding a grasped product above its target bin during "
+                  "transport; the object is welded to the hand and clears the bin walls."})
 
     a({"type": "h1", "text": "10. Conveyor Feed and Sorting"})
     a({"type": "p", "text":
@@ -249,6 +264,9 @@ def build_content():
        ]})
     a({"type": "p", "text":
        "The remaining ~6% are occasional grasp misses, which is realistic for a physical system."})
+    a({"type": "image", "path": "docs/figures/fig_results.png", "width_in": 6.0,
+       "caption": "Figure 6. Per-episode physical placement success and sort accuracy for a "
+                  "representative six-episode run of six products each."})
 
     a({"type": "h1", "text": "14. Limitations and Future Work"})
     a({"type": "p", "text": "Limitations:"})
@@ -331,6 +349,15 @@ def render_docx(content, path):
             r = p.add_run(block["text"])
             r.font.name = "Consolas"
             r.font.size = Pt(9.5)
+        elif bt == "image":
+            if Path(block["path"]).exists():
+                doc.add_picture(block["path"], width=Inches(block.get("width_in", 6.0)))
+                doc.paragraphs[-1].alignment = WD_ALIGN_PARAGRAPH.CENTER
+                cap = doc.add_paragraph()
+                cap.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                cr = cap.add_run(block["caption"])
+                cr.italic = True
+                cr.font.size = Pt(9)
         elif bt == "table":
             headers = block["headers"]
             rows = block["rows"]
@@ -396,6 +423,18 @@ def render_pdf(content, path):
             story.append(Spacer(1, 0.2 * cm))
         elif bt == "code":
             story.append(Paragraph(esc(block["text"]).replace("\n", "<br/>"), code))
+        elif bt == "image":
+            if Path(block["path"]).exists():
+                from reportlab.platypus import Image as RLImage
+                from PIL import Image as PILImage
+                iw, ih = PILImage.open(block["path"]).size
+                w = block.get("width_in", 6.0) * 2.54 * cm
+                h = w * ih / iw
+                img = RLImage(block["path"], width=w, height=h)
+                img.hAlign = "CENTER"
+                story.append(img)
+                story.append(Paragraph("<i>%s</i>" % esc(block["caption"]), center))
+                story.append(Spacer(1, 0.35 * cm))
         elif bt == "table":
             data = [[Paragraph("<b>%s</b>" % esc(h), body) for h in block["headers"]]]
             for row in block["rows"]:
