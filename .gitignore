@@ -1,0 +1,51 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+*.egg
+.eggs/
+
+# Virtual Environment
+venv/
+env/
+.venv/
+.kiro/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Data and Models (large files)
+data/models/*.pt
+data/models/*.pth
+data/models/*.onnx
+data/dataset/train/images/*.png
+data/dataset/train/images/*.jpg
+data/dataset/val/images/*.png
+data/dataset/val/images/*.jpg
+data/dataset/test/images/*.png
+data/dataset/test/images/*.jpg
+
+# Results (regenerate from runs)
+results/logs/
+results/metrics/*.json
+results/visualizations/*.png
+results/visualizations/*.mp4
+
+# System
+.DS_Store
+Thumbs.db
+*.log
+
+# Isaac Sim
+_isaac_sim/
+*.usd.tmp
+
+# ROS2 build artifacts
+install/
+log/

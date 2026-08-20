@@ -1,0 +1,28 @@
+# ==============================================================================
+# Object Tracking Configuration (ByteTrack)
+# Vision-Guided Robotic Pick-and-Place
+# ==============================================================================
+
+tracking:
+  enabled: true  # Can be disabled for static scenes
+  
+  # ByteTrack parameters
+  bytetrack:
+    track_thresh: 0.5      # High threshold for first association
+    track_buffer: 30       # Frames to keep lost tracks
+    match_thresh: 0.8      # IoU threshold for matching
+    min_box_area: 100      # Minimum bounding box area in pixels
+    frame_rate: 30         # Expected frame rate
+    
+  # Track management
+  management:
+    max_age: 30            # Max frames without detection before deletion
+    min_hits: 3            # Min detections before track is confirmed
+    iou_threshold: 0.3     # IoU threshold for association
+    
+  # Display
+  visualization:
+    draw_track_id: true
+    draw_trajectory: true
+    trajectory_length: 20  # frames of trajectory to display
+    id_font_scale: 0.7

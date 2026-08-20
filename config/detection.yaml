@@ -1,0 +1,73 @@
+# ==============================================================================
+# Object Detection Configuration
+# Vision-Guided Robotic Pick-and-Place
+# ==============================================================================
+
+detection:
+  # Model settings
+  model:
+    architecture: "yolov8"
+    variant: "yolov8n"  # nano for speed, can use yolov8s/m for accuracy
+    weights: "yolov8n.pt"  # pretrained, or custom weights path
+    custom_weights: null  # path to custom trained weights if available
+    device: "cuda"  # cuda or cpu
+    half_precision: true  # FP16 inference
+
+  # Inference settings
+  inference:
+    confidence_threshold: 0.5
+    nms_iou_threshold: 0.45
+    max_detections: 20
+    input_size: [640, 640]  # YOLO input resolution
+    agnostic_nms: false
+    
+  # Class mapping
+  # Maps COCO class IDs or custom class IDs to our object classes
+  classes:
+    # If using pretrained COCO model, map relevant classes
+    coco_mapping:
+      # We'll fine-tune or use color-based post-processing
+      # COCO doesn't have colored boxes, so we use custom training
+      enabled: false
+      
+    # Custom classes for our objects
+    custom_classes:
+      0: "red_box"
+      1: "blue_box"
+      2: "green_cylinder"
+      3: "yellow_sphere"
+    
+    num_classes: 4
+    
+  # Color-based classification (backup/enhancement)
+  color_classification:
+    enabled: true  # Use HSV color analysis to classify objects
+    hsv_ranges:
+      red:
+        lower: [0, 30, 30]
+        upper: [15, 255, 255]
+        lower2: [155, 30, 30]  # red wraps around in HSV
+        upper2: [180, 255, 255]
+      blue:
+        lower: [85, 30, 30]
+        upper: [145, 255, 255]
+      green:
+        lower: [25, 30, 30]
+        upper: [95, 255, 255]
+      yellow:
+        lower: [15, 30, 30]
+        upper: [30, 255, 255]
+
+  # Visualization
+  visualization:
+    draw_boxes: true
+    draw_labels: true
+    draw_confidence: true
+    draw_centers: true
+    box_thickness: 2
+    font_scale: 0.6
+    colors:
+      red_box: [0, 0, 255]  # BGR for OpenCV
+      blue_box: [255, 0, 0]
+      green_cylinder: [0, 255, 0]
+      yellow_sphere: [0, 255, 255]

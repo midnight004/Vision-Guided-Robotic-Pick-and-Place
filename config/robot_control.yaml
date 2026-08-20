@@ -1,0 +1,66 @@
+# ==============================================================================
+# Robot Control Configuration
+# Vision-Guided Robotic Pick-and-Place
+# ==============================================================================
+
+robot_control:
+  # Controller type
+  controller:
+    type: "operational_space"  # joint_space, operational_space, rmpflow
+    
+  # Motion planning
+  motion_planning:
+    planner: "rrt_connect"  # or direct IK for simple motions
+    planning_time: 2.0  # seconds max
+    
+  # Inverse kinematics
+  ik:
+    solver: "damped_least_squares"
+    damping: 0.05
+    max_iterations: 100
+    tolerance: 0.001  # meters
+    
+  # Pick and place parameters
+  pick_place:
+    # Approach phase
+    approach:
+      height_above_object: 0.15  # meters
+      velocity: 0.3  # m/s
+      
+    # Grasp phase
+    grasp:
+      height_above_table: 0.025  # meters (center of object)
+      close_delay: 0.5  # seconds to wait after closing gripper
+      force_threshold: 20.0  # Newtons
+      
+    # Lift phase
+    lift:
+      height: 0.20  # meters above table
+      velocity: 0.2  # m/s
+      
+    # Transport phase
+    transport:
+      height: 0.25  # meters above table
+      velocity: 0.4  # m/s
+      
+    # Place phase
+    place:
+      height_above_destination: 0.05  # meters
+      open_delay: 0.3  # seconds to wait after opening gripper
+      retreat_height: 0.20  # meters
+      
+  # Safety limits
+  safety:
+    workspace_bounds:
+      x: [-0.1, 0.9]
+      y: [-0.6, 0.6]
+      z: [0.0, 0.8]
+    max_joint_velocity: 2.0  # rad/s
+    collision_check: true
+    
+  # Home configuration
+  home_position:
+    joint_angles: [0.0, -0.785, 0.0, -2.356, 0.0, 1.571, 0.785]
+    # Corresponding end effector pose (approximate)
+    ee_position: [0.307, 0.0, 0.59]
+    ee_orientation: [1.0, 0.0, 0.0, 0.0]

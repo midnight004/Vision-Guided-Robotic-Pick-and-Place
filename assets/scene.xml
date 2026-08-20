@@ -1,0 +1,199 @@
+<!--
+  Vision-Guided Robotic Pick-and-Place
+  MuJoCo Scene: Franka Panda + Table + Colored Objects + Destination Bins + Camera
+-->
+<mujoco model="pick_and_place_workspace">
+  <compiler angle="radian" autolimits="true"/>
+  
+  <option timestep="0.002" gravity="0 0 -9.81" integrator="implicitfast"/>
+
+  <default>
+    <default class="panda">
+      <joint armature="0.01" damping="5" frictionloss="0.1"/>
+    </default>
+  </default>
+
+  <asset>
+    <texture name="floor_tex" type="2d" builtin="checker" rgb1="0.8 0.8 0.8" rgb2="0.6 0.6 0.6" width="256" height="256"/>
+    <texture name="skybox" type="skybox" builtin="gradient" rgb1="0.4 0.6 0.8" rgb2="0.9 0.95 1.0" width="256" height="256"/>
+    <material name="floor_mat" texture="floor_tex" texrepeat="6 6" specular="0.1"/>
+  </asset>
+
+  <worldbody>
+    <!-- Lighting -->
+    <light name="top" pos="0.5 0 1.5" dir="0 0 -1" diffuse="0.8 0.8 0.8" specular="0.3 0.3 0.3" castshadow="true"/>
+    <light name="front_fill" pos="0.5 -1 1.2" dir="0 0.5 -0.5" diffuse="0.4 0.4 0.4" castshadow="false"/>
+    <light name="side_fill" pos="-0.5 0 1.2" dir="0.5 0 -0.5" diffuse="0.3 0.3 0.3" castshadow="false"/>
+
+    <!-- Floor -->
+    <geom name="floor" type="plane" size="2 2 0.01" material="floor_mat"/>
+
+    <!-- Cameras -->
+    <camera name="overhead_cam" pos="0.5 0 1.3" xyaxes="1 0 0 0 1 0" fovy="60"/>
+    <camera name="side_cam" pos="1.2 -0.8 0.8" xyaxes="0.6 1 0 -0.2 0 1"/>
+
+    <!-- ============ TABLE ============ -->
+    <body name="table" pos="0.5 0 0.3">
+      <geom name="table_top" type="box" size="0.4 0.45 0.02" pos="0 0 0" rgba="0.55 0.4 0.2 1" mass="50"/>
+      <geom type="cylinder" size="0.025 0.14" pos="0.3 0.35 -0.16" rgba="0.3 0.3 0.3 1"/>
+      <geom type="cylinder" size="0.025 0.14" pos="-0.3 0.35 -0.16" rgba="0.3 0.3 0.3 1"/>
+      <geom type="cylinder" size="0.025 0.14" pos="0.3 -0.35 -0.16" rgba="0.3 0.3 0.3 1"/>
+      <geom type="cylinder" size="0.025 0.14" pos="-0.3 -0.35 -0.16" rgba="0.3 0.3 0.3 1"/>
+    </body>
+
+    <!-- ============ DESTINATION BINS (open-top boxes) ============ -->
+    <!-- Red bin (front-left) -->
+    <body name="bin_red" pos="0.3 -0.25 0.32">
+      <geom name="bin_red_bottom" type="box" size="0.045 0.045 0.003" rgba="0.8 0.1 0.1 1"/>
+      <geom type="box" size="0.045 0.003 0.03" pos="0 0.042 0.03" rgba="0.8 0.1 0.1 0.8"/>
+      <geom type="box" size="0.045 0.003 0.03" pos="0 -0.042 0.03" rgba="0.8 0.1 0.1 0.8"/>
+      <geom type="box" size="0.003 0.045 0.03" pos="0.042 0 0.03" rgba="0.8 0.1 0.1 0.8"/>
+      <geom type="box" size="0.003 0.045 0.03" pos="-0.042 0 0.03" rgba="0.8 0.1 0.1 0.8"/>
+    </body>
+
+    <!-- Blue bin (front-right) -->
+    <body name="bin_blue" pos="0.3 0.25 0.32">
+      <geom name="bin_blue_bottom" type="box" size="0.045 0.045 0.003" rgba="0.1 0.1 0.8 1"/>
+      <geom type="box" size="0.045 0.003 0.03" pos="0 0.042 0.03" rgba="0.1 0.1 0.8 0.8"/>
+      <geom type="box" size="0.045 0.003 0.03" pos="0 -0.042 0.03" rgba="0.1 0.1 0.8 0.8"/>
+      <geom type="box" size="0.003 0.045 0.03" pos="0.042 0 0.03" rgba="0.1 0.1 0.8 0.8"/>
+      <geom type="box" size="0.003 0.045 0.03" pos="-0.042 0 0.03" rgba="0.1 0.1 0.8 0.8"/>
+    </body>
+
+    <!-- Green bin (back-left) -->
+    <body name="bin_green" pos="0.55 -0.25 0.32">
+      <geom name="bin_green_bottom" type="box" size="0.045 0.045 0.003" rgba="0.1 0.7 0.1 1"/>
+      <geom type="box" size="0.045 0.003 0.03" pos="0 0.042 0.03" rgba="0.1 0.7 0.1 0.8"/>
+      <geom type="box" size="0.045 0.003 0.03" pos="0 -0.042 0.03" rgba="0.1 0.7 0.1 0.8"/>
+      <geom type="box" size="0.003 0.045 0.03" pos="0.042 0 0.03" rgba="0.1 0.7 0.1 0.8"/>
+      <geom type="box" size="0.003 0.045 0.03" pos="-0.042 0 0.03" rgba="0.1 0.7 0.1 0.8"/>
+    </body>
+
+    <!-- Yellow bin (back-right) -->
+    <body name="bin_yellow" pos="0.55 0.25 0.32">
+      <geom name="bin_yellow_bottom" type="box" size="0.045 0.045 0.003" rgba="0.9 0.8 0.05 1"/>
+      <geom type="box" size="0.045 0.003 0.03" pos="0 0.042 0.03" rgba="0.9 0.8 0.05 0.8"/>
+      <geom type="box" size="0.045 0.003 0.03" pos="0 -0.042 0.03" rgba="0.9 0.8 0.05 0.8"/>
+      <geom type="box" size="0.003 0.045 0.03" pos="0.042 0 0.03" rgba="0.9 0.8 0.05 0.8"/>
+      <geom type="box" size="0.003 0.045 0.03" pos="-0.042 0 0.03" rgba="0.9 0.8 0.05 0.8"/>
+    </body>
+
+    <!-- ============ FRANKA PANDA ROBOT ============ -->
+    <body name="panda_link0" pos="0 0 0.32">
+      <geom type="cylinder" size="0.06 0.05" pos="0 0 -0.03" rgba="0.2 0.2 0.2 1" mass="3"/>
+      
+      <body name="panda_link1" pos="0 0 0.333">
+        <joint name="panda_joint1" class="panda" type="hinge" axis="0 0 1" range="-2.8973 2.8973"/>
+        <geom type="capsule" size="0.06" fromto="0 0 0 0 0 -0.19" rgba="0.9 0.9 0.9 1" mass="3.5"/>
+        
+        <body name="panda_link2">
+          <joint name="panda_joint2" class="panda" type="hinge" axis="0 1 0" range="-1.7628 1.7628"/>
+          <geom type="capsule" size="0.06" fromto="0 0 0 0 0 0.316" rgba="0.9 0.9 0.9 1" mass="3.5"/>
+          
+          <body name="panda_link3" pos="0 0 0.316">
+            <joint name="panda_joint3" class="panda" type="hinge" axis="0 0 1" range="-2.8973 2.8973"/>
+            <geom type="capsule" size="0.05" fromto="0 0 0 0.0825 0 0" rgba="0.9 0.9 0.9 1" mass="2.5"/>
+            
+            <body name="panda_link4" pos="0.0825 0 0">
+              <joint name="panda_joint4" class="panda" type="hinge" axis="0 -1 0" range="-3.0718 -0.0698"/>
+              <geom type="capsule" size="0.05" fromto="0 0 0 -0.0825 0 0.384" rgba="0.9 0.9 0.9 1" mass="2.5"/>
+              
+              <body name="panda_link5" pos="-0.0825 0 0.384">
+                <joint name="panda_joint5" class="panda" type="hinge" axis="0 0 1" range="-2.8973 2.8973"/>
+                <geom type="capsule" size="0.04" fromto="0 0 0 0 0 -0.08" rgba="0.9 0.9 0.9 1" mass="2"/>
+                
+                <body name="panda_link6">
+                  <joint name="panda_joint6" class="panda" type="hinge" axis="0 1 0" range="-0.0175 3.7525"/>
+                  <geom type="capsule" size="0.035" fromto="0 0 0 0.088 0 0" rgba="0.9 0.9 0.9 1" mass="0.5"/>
+                  
+                  <body name="panda_link7" pos="0.088 0 0">
+                    <joint name="panda_joint7" class="panda" type="hinge" axis="0 0 1" range="-2.8973 2.8973"/>
+                    <geom type="cylinder" size="0.04 0.02" pos="0 0 0.05" rgba="0.25 0.25 0.25 1" mass="0.2"/>
+                    
+                    <!-- HAND + GRIPPER -->
+                    <body name="panda_hand" pos="0 0 0.08">
+                      <geom type="box" size="0.015 0.03 0.02" rgba="0.25 0.25 0.25 1" mass="0.1"/>
+                      
+                      <!-- Left finger -->
+                      <body name="finger_left" pos="0 0.04 0.04">
+                        <joint name="panda_finger_joint1" type="slide" axis="0 -1 0" range="0 0.04" damping="5" armature="0.01"/>
+                        <geom name="finger_left_geom" type="box" size="0.01 0.007 0.03" rgba="0.3 0.3 0.3 1"
+                              condim="6" friction="3 0.02 0.001" solimp="0.95 0.95 0.01" mass="0.02"/>
+                      </body>
+                      
+                      <!-- Right finger -->
+                      <body name="finger_right" pos="0 -0.04 0.04">
+                        <joint name="panda_finger_joint2" type="slide" axis="0 1 0" range="0 0.04" damping="5" armature="0.01"/>
+                        <geom name="finger_right_geom" type="box" size="0.01 0.007 0.03" rgba="0.3 0.3 0.3 1"
+                              condim="6" friction="3 0.02 0.001" solimp="0.95 0.95 0.01" mass="0.02"/>
+                      </body>
+                      
+                      <!-- Grasp center site -->
+                      <site name="ee_site" pos="0 0 0.04" size="0.005" rgba="1 0 0 0.5"/>
+                    </body>
+                  </body>
+                </body>
+              </body>
+            </body>
+          </body>
+        </body>
+      </body>
+    </body>
+
+    <!-- ============ OBJECTS (larger for better visibility) ============ -->
+    <body name="red_box" pos="0.4 -0.1 0.35">
+      <joint name="red_box_joint" type="free" damping="0.001"/>
+      <geom name="red_box_geom" type="box" size="0.025 0.025 0.025" rgba="0.9 0.1 0.05 1" mass="0.03"
+            condim="6" friction="2 0.01 0.001" solimp="0.95 0.95 0.01"/>
+    </body>
+
+    <body name="blue_box" pos="0.55 0.1 0.35">
+      <joint name="blue_box_joint" type="free" damping="0.001"/>
+      <geom name="blue_box_geom" type="box" size="0.025 0.025 0.025" rgba="0.05 0.1 0.9 1" mass="0.03"
+            condim="6" friction="2 0.01 0.001" solimp="0.95 0.95 0.01"/>
+    </body>
+
+    <body name="green_cylinder" pos="0.45 0.12 0.35">
+      <joint name="green_cyl_joint" type="free" damping="0.001"/>
+      <geom name="green_cyl_geom" type="cylinder" size="0.02 0.03" rgba="0.05 0.8 0.1 1" mass="0.03"
+            condim="6" friction="2 0.01 0.001" solimp="0.95 0.95 0.01"/>
+    </body>
+
+    <body name="yellow_sphere" pos="0.55 -0.05 0.35">
+      <joint name="yellow_sph_joint" type="free" damping="0.001"/>
+      <geom name="yellow_sph_geom" type="sphere" size="0.022" rgba="0.95 0.85 0.05 1" mass="0.02"
+            condim="6" friction="2 0.01 0.001" solimp="0.95 0.95 0.01"/>
+    </body>
+
+  </worldbody>
+
+  <!-- ============ ACTUATORS ============ -->
+  <actuator>
+    <position name="act_joint1" joint="panda_joint1" kp="5000" ctrlrange="-2.8973 2.8973"/>
+    <position name="act_joint2" joint="panda_joint2" kp="5000" ctrlrange="-1.7628 1.7628"/>
+    <position name="act_joint3" joint="panda_joint3" kp="5000" ctrlrange="-2.8973 2.8973"/>
+    <position name="act_joint4" joint="panda_joint4" kp="5000" ctrlrange="-3.0718 -0.0698"/>
+    <position name="act_joint5" joint="panda_joint5" kp="5000" ctrlrange="-2.8973 2.8973"/>
+    <position name="act_joint6" joint="panda_joint6" kp="10000" ctrlrange="-0.0175 3.7525"/>
+    <position name="act_joint7" joint="panda_joint7" kp="5000" ctrlrange="-2.8973 2.8973"/>
+    <position name="act_finger1" joint="panda_finger_joint1" kp="500" ctrlrange="0 0.04"/>
+    <position name="act_finger2" joint="panda_finger_joint2" kp="500" ctrlrange="0 0.04"/>
+  </actuator>
+
+  <!-- ============ SENSORS ============ -->
+  <sensor>
+    <framepos name="ee_pos" objtype="site" objname="ee_site"/>
+    <framequat name="ee_quat" objtype="site" objname="ee_site"/>
+    <jointpos name="finger1_pos" joint="panda_finger_joint1"/>
+    <jointpos name="finger2_pos" joint="panda_finger_joint2"/>
+  </sensor>
+
+  <!-- ============ KEYFRAME ============ -->
+  <keyframe>
+    <key name="home" qpos="0 -0.785 0 -2.356 0 1.571 0.785 0 0
+                            0.4 -0.1 0.35 1 0 0 0
+                            0.55 0.1 0.35 1 0 0 0
+                            0.45 0.12 0.35 1 0 0 0
+                            0.55 -0.05 0.35 1 0 0 0"/>
+  </keyframe>
+</mujoco>

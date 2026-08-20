@@ -1,0 +1,42 @@
+# ==============================================================================
+# Vision-Guided Robotic Pick-and-Place - Dependencies
+# Python 3.12 required (MuJoCo compatibility)
+# ==============================================================================
+
+# Simulation
+mujoco>=3.0.0
+
+# Computer Vision
+opencv-python>=4.8.0
+opencv-contrib-python>=4.8.0
+
+# Deep Learning / Detection
+torch>=2.0.0
+torchvision>=0.15.0
+ultralytics>=8.0.200  # YOLOv8
+
+# Tracking
+filterpy>=1.4.5  # Kalman filtering
+
+# Math / Science
+numpy>=1.24.0
+scipy>=1.10.0
+
+# Configuration
+PyYAML>=6.0
+
+# Visualization / Plotting
+matplotlib>=3.7.0
+seaborn>=0.12.0
+
+# Utilities
+tqdm>=4.65.0
+pandas>=2.0.0
+Pillow>=9.5.0
+
+# ROS2 (optional, installed via ROS2 setup)
+# rclpy
+# sensor_msgs
+# geometry_msgs
+# std_msgs
+# tf2_ros

@@ -1,0 +1,92 @@
+# ==============================================================================
+# MuJoCo Simulation Configuration
+# Vision-Guided Robotic Pick-and-Place
+# ==============================================================================
+
+simulation:
+  engine: "mujoco"
+  scene_xml: "assets/scene.xml"
+  
+  # Physics settings
+  physics:
+    timestep: 0.002  # 500Hz physics
+    gravity: [0.0, 0.0, -9.81]
+    
+  # Rendering
+  rendering:
+    width: 640
+    height: 480
+    camera: "overhead_cam"
+    
+  # Scene dimensions (meters)
+  workspace:
+    table:
+      position: [0.5, 0.0, 0.37]
+      surface_height: 0.39  # table_z + thickness/2
+    
+    # Pick area bounds (on table surface)
+    pick_area:
+      x_range: [0.35, 0.65]
+      y_range: [-0.25, 0.25]
+      z: 0.415  # surface + half object height
+    
+    # Place destinations
+    place_areas:
+      red_destination:
+        center: [0.3, -0.25, 0.35]
+        color: [1.0, 0.0, 0.0]
+      blue_destination:
+        center: [0.3, 0.25, 0.35]
+        color: [0.0, 0.0, 1.0]
+      green_destination:
+        center: [0.55, -0.25, 0.35]
+        color: [0.0, 1.0, 0.0]
+      yellow_destination:
+        center: [0.55, 0.25, 0.35]
+        color: [1.0, 0.9, 0.0]
+
+  # Objects
+  objects:
+    classes:
+      - name: "red_box"
+        shape: "box"
+        size: [0.02, 0.02, 0.02]
+        color: [0.85, 0.12, 0.1]
+        mass: 0.05
+      - name: "blue_box"
+        shape: "box"
+        size: [0.02, 0.02, 0.02]
+        color: [0.1, 0.15, 0.85]
+        mass: 0.05
+      - name: "green_cylinder"
+        shape: "cylinder"
+        size: [0.018, 0.018, 0.025]
+        color: [0.1, 0.75, 0.15]
+        mass: 0.04
+      - name: "yellow_sphere"
+        shape: "sphere"
+        size: [0.02, 0.02, 0.02]
+        color: [0.92, 0.85, 0.1]
+        mass: 0.03
+    spawn:
+      randomize_positions: true
+      randomize_orientations: false
+      min_separation: 0.08
+
+# Robot configuration
+robot:
+  type: "franka_panda"
+  num_joints: 7
+  base_position: [0.0, 0.0, 0.37]
+  
+  home_joints: [0.0, -0.785, 0.0, -2.356, 0.0, 1.571, 0.785]
+  
+  gripper:
+    open_width: 0.04
+    closed_width: 0.0
+
+  motion:
+    approach_height: 0.15
+    grasp_height_offset: 0.06
+    lift_height: 0.25
+    transport_height: 0.30

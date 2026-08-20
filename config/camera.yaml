@@ -1,0 +1,56 @@
+# ==============================================================================
+# Camera Configuration
+# Vision-Guided Robotic Pick-and-Place
+# ==============================================================================
+
+camera:
+  # Camera type and setup
+  type: "rgbd"  # rgb or rgbd
+  name: "workspace_camera"
+  
+  # Camera pose in world frame (overhead, looking down at table)
+  position: [0.5, 0.0, 1.3]  # meters - centered above workspace
+  orientation:  # quaternion wxyz - looking straight down
+    w: 0.0
+    x: 1.0
+    y: 0.0
+    z: 0.0
+  # Alternative: euler angles [roll, pitch, yaw] in degrees
+  euler_degrees: [180.0, 0.0, 0.0]  # pointing down
+  
+  # Intrinsic parameters
+  intrinsics:
+    width: 640
+    height: 480
+    focal_length: 1.88  # mm (Isaac Sim default)
+    horizontal_aperture: 2.4  # mm
+    vertical_aperture: 1.8  # mm
+    # Computed from above:
+    fx: 500.0  # focal length in pixels
+    fy: 500.0
+    cx: 320.0  # principal point
+    cy: 240.0
+    
+  # Depth camera settings
+  depth:
+    enabled: true
+    min_range: 0.1   # meters
+    max_range: 5.0   # meters
+    noise_std: 0.001  # meters (simulated noise)
+    
+  # Image acquisition
+  acquisition:
+    fps: 30
+    format: "rgb8"  # rgb8, bgr8, rgba8
+    depth_format: "float32"
+    
+  # Camera calibration reference
+  calibration:
+    # Camera-to-world extrinsic matrix (4x4)
+    # This transforms points FROM camera frame TO world frame
+    # Will be computed from position/orientation above
+    use_known_extrinsics: true  # In sim, we know exact pose
+    
+    # Distortion (zero in simulation)
+    distortion_model: "none"
+    distortion_coefficients: [0.0, 0.0, 0.0, 0.0, 0.0]

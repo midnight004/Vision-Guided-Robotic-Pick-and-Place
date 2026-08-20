@@ -1,0 +1,39 @@
+# ==============================================================================
+# Task Logic Configuration
+# Vision-Guided Robotic Pick-and-Place - Color Sorting Task
+# ==============================================================================
+
+task:
+  name: "color_sorting"
+  description: "Sort objects by color to designated destinations"
+  
+  # Sorting rules: object class -> destination
+  sorting_rules:
+    red_box: "red_destination"
+    blue_box: "blue_destination"
+    green_cylinder: "green_destination"
+    yellow_sphere: "yellow_destination"
+    
+  # Task execution parameters
+  execution:
+    max_attempts_per_object: 3  # retries if pick fails
+    timeout_per_object: 30.0    # seconds
+    total_timeout: 180.0        # seconds for full episode
+    pause_between_picks: 1.0    # seconds between pick operations
+    
+  # Priority (which object to pick first)
+  priority:
+    method: "nearest"  # nearest, largest, class_order
+    class_order: ["red_box", "blue_box", "green_cylinder", "yellow_sphere"]
+    
+  # Success criteria
+  success:
+    position_tolerance: 0.05  # meters from destination center
+    all_objects_required: false  # true = fail if any object missed
+    min_success_rate: 0.75  # minimum fraction to consider task successful
+
+  # Episode configuration
+  episodes:
+    num_episodes: 10  # for evaluation
+    objects_per_episode: 4
+    randomize: true

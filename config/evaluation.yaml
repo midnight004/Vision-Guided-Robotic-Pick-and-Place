@@ -1,0 +1,50 @@
+# ==============================================================================
+# Evaluation Configuration
+# Vision-Guided Robotic Pick-and-Place
+# ==============================================================================
+
+evaluation:
+  # Detection metrics
+  detection:
+    iou_threshold: 0.5
+    confidence_thresholds: [0.3, 0.5, 0.7, 0.9]
+    compute_map: true
+    compute_per_class: true
+    
+  # Tracking metrics
+  tracking:
+    evaluate_mota: true
+    evaluate_id_switches: true
+    max_frames: 300
+    
+  # Localization metrics
+  localization:
+    ground_truth_source: "simulation"  # Isaac Sim provides GT poses
+    error_metrics: ["mae", "rmse", "max_error"]
+    report_per_axis: true  # x, y, z separately
+    
+  # Task metrics
+  task:
+    metrics:
+      - "pick_success_rate"
+      - "place_success_rate"
+      - "complete_task_rate"
+      - "average_cycle_time"
+      - "objects_per_minute"
+    position_tolerance: 0.05  # meters
+    
+  # Robustness testing
+  robustness:
+    num_trials: 20
+    randomize_positions: true
+    randomize_orientations: true
+    position_noise_std: 0.02  # meters
+    lighting_variations: false  # enable for advanced testing
+    
+  # Output
+  output:
+    save_metrics_json: true
+    save_plots: true
+    save_per_episode: true
+    output_dir: "results/metrics"
+    plot_dir: "results/visualizations"
