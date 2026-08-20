@@ -4,6 +4,10 @@
 # ==============================================================================
 
 detection:
+  # Detection mode: 'segmentation' (sim ground-truth masks, reliable),
+  # 'yolo' (custom-trained model), or 'color' (HSV thresholding)
+  mode: "segmentation"
+
   # Model settings
   model:
     architecture: "yolov8"
@@ -36,27 +40,31 @@ detection:
       1: "blue_box"
       2: "green_cylinder"
       3: "yellow_sphere"
+      4: "red_can"
+      5: "blue_capsule"
+      6: "green_box"
+      7: "yellow_bottle"
     
-    num_classes: 4
+    num_classes: 8
     
   # Color-based classification (backup/enhancement)
   color_classification:
     enabled: true  # Use HSV color analysis to classify objects
     hsv_ranges:
       red:
-        lower: [0, 30, 30]
-        upper: [15, 255, 255]
-        lower2: [155, 30, 30]  # red wraps around in HSV
+        lower: [0, 80, 80]
+        upper: [12, 255, 255]
+        lower2: [160, 80, 80]
         upper2: [180, 255, 255]
       blue:
-        lower: [85, 30, 30]
-        upper: [145, 255, 255]
+        lower: [95, 80, 80]
+        upper: [135, 255, 255]
       green:
-        lower: [25, 30, 30]
-        upper: [95, 255, 255]
+        lower: [36, 60, 60]
+        upper: [90, 255, 255]
       yellow:
-        lower: [15, 30, 30]
-        upper: [30, 255, 255]
+        lower: [12, 60, 60]
+        upper: [35, 255, 255]
 
   # Visualization
   visualization:

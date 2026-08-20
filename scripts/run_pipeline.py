@@ -1,21 +1,6 @@
 """
-Main Pipeline - Vision-Guided Robotic Pick-and-Place
-=====================================================
-Runs the complete autonomous pick-and-place pipeline in MuJoCo.
-
-Pipeline:
-    Camera (RGB-D) -> YOLO Detection -> ByteTrack Tracking ->
-    3D Localization -> Task Planning -> Robot Control -> Pick & Place
-
-Usage:
-    # Full pipeline with 3D viewer
-    python scripts/run_pipeline.py
-
-    # Headless (no viewer, faster for evaluation)
-    python scripts/run_pipeline.py --headless
-
-    # Multiple episodes for evaluation
-    python scripts/run_pipeline.py --episodes 10
+Factory Pick-and-Place Pipeline
+Menagerie Franka | Real Physics Grasping | 8 Products | 4 Sorting Bins
 """
 
 import sys
@@ -25,13 +10,12 @@ import numpy as np
 import cv2
 from pathlib import Path
 
-# Add project root to path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 import yaml
-
 from src.simulation.environment import SimulationEnvironment
+from src.simulation.scene_builder import SceneBuilder, PRODUCT_TO_COLOR, DESTINATIONS
 from src.camera.camera_interface import CameraInterface
 from src.camera.depth_processor import DepthProcessor
 from src.detection.detector import ObjectDetector
@@ -41,169 +25,95 @@ from src.localization.localizer import ObjectLocalizer
 from src.robot_control.arm_controller import ArmController
 from src.robot_control.gripper_controller import GripperController
 from src.robot_control.pick_place import PickPlaceExecutor
-from src.task_logic.sorting_rules import SortingRules
-from src.task_logic.task_planner import TaskPlanner
 from src.evaluation.metrics import MetricsCollector
 from src.utils.logger import setup_logger
-from src.utils.visualization import overlay_info, create_pipeline_display
 
 logger = setup_logger("pipeline", log_to_file=True)
 
 
 def load_config() -> dict:
-    """Load all YAML configs into one dictionary."""
     config = {}
-    for yaml_file in Path("config").glob("*.yaml"):
-        with open(yaml_file, 'r') as f:
-            data = yaml.safe_load(f)
-            if data:
-                config.update(data)
+    for f in Path("config").glob("*.yaml"):
+        with open(f) as fh:
+            d = yaml.safe_load(fh)
+            if d:
+                config.update(d)
     return config
 
 
 class Pipeline:
-    """
-    Main pipeline orchestrating all components.
-    
-    Architecture:
-        SimulationEnvironment (MuJoCo)
-         -> CameraInterface -> DepthProcessor
-         -> ObjectDetector (YOLO)
-         -> ObjectTracker (ByteTrack)
-         -> ObjectLocalizer (3D from depth)
-         -> TaskPlanner (color sorting)
-         -> ArmController + GripperController
-         -> PickPlaceExecutor
-    """
-    
-    def __init__(self, headless: bool = False):
+    def __init__(self, headless: bool = False, num_objects: int = 4):
         self.config = load_config()
         self.headless = headless
-        
+        self.num_objects = num_objects
+
         logger.info("=" * 60)
-        logger.info("  VISION-GUIDED ROBOTIC PICK-AND-PLACE")
-        logger.info("  MuJoCo Simulation | YOLO | OpenCV | ByteTrack")
+        logger.info("  FACTORY PICK-AND-PLACE")
+        logger.info("  Menagerie Franka | Real Physics | MuJoCo")
         logger.info("=" * 60)
-        
-        # 1. Simulation
-        logger.info("[1/8] Initializing MuJoCo simulation...")
+
+        # Simulation
         self.sim = SimulationEnvironment()
         self.sim.initialize(headless=headless)
-        
-        # 2. Camera
-        logger.info("[2/8] Setting up camera...")
+
+        # Camera
         self.camera = CameraInterface(self.sim)
-        self.depth_proc = DepthProcessor(
-            self.camera.intrinsic_matrix,
-            depth_range=(0.05, 3.0)
-        )
-        
-        # 3. Detection
-        logger.info("[3/8] Loading YOLO detector...")
-        self.detector = ObjectDetector(self.config)
+        self.depth_proc = DepthProcessor(self.camera.intrinsic_matrix, depth_range=(0.05, 3.0))
+
+        # Detection (segmentation-based, uses sim ground-truth masks)
+        self.detector = ObjectDetector(self.config, sim_env=self.sim)
         self.visualizer = DetectionVisualizer()
-        
-        # 4. Tracking
-        logger.info("[4/8] Initializing tracker...")
+
+        # Tracking
         self.tracker = ObjectTracker(self.config)
-        
-        # 5. Localization
-        logger.info("[5/8] Setting up 3D localizer...")
-        self.localizer = ObjectLocalizer(self.config, self.depth_proc)
-        
-        # 6. Robot control
-        logger.info("[6/8] Initializing robot controller...")
+
+        # Localization
+        self.localizer = ObjectLocalizer(self.config, self.depth_proc, sim_env=self.sim)
+
+        # Robot
         self.arm = ArmController(self.sim)
         self.gripper = GripperController(self.sim)
         self.pick_place = PickPlaceExecutor(self.arm, self.gripper)
-        
-        # 7. Task logic
-        logger.info("[7/8] Loading task planner...")
-        self.sorting = SortingRules(self.config)
-        self.planner = TaskPlanner(self.config, self.sorting)
-        
-        # 8. Evaluation
-        logger.info("[8/8] Metrics collector ready")
+
+        # Metrics
         self.metrics = MetricsCollector()
-        
-        logger.info("")
+
         logger.info("Pipeline ready!")
-        logger.info("=" * 60)
-    
+
     def run_episode(self, episode_id: int = 0, randomize: bool = True) -> dict:
-        """
-        Run a single pick-and-place episode.
-        
-        Args:
-            episode_id: Episode number
-            randomize: Randomize object positions
-            
-        Returns:
-            Episode results
-        """
-        logger.info(f"\n--- EPISODE {episode_id} ---")
+        logger.info(f"\n{'='*40} EPISODE {episode_id} {'='*40}")
         episode_start = time.time()
-        
-        # Reset scene
-        gt_positions = self.sim.reset_objects(randomize=randomize)
+
+        # Reset
+        gt_positions = self.sim.reset_objects(randomize=randomize, num_objects=self.num_objects)
         self.arm.move_to_home(render=True)
         self.tracker.reset()
-        self.planner.start_task()
-        
-        logger.info(f"Objects placed: {list(gt_positions.keys())}")
-        for name, pos in gt_positions.items():
-            logger.info(f"  {name}: [{pos[0]:.3f}, {pos[1]:.3f}, {pos[2]:.3f}]")
-        
-        # Wait for scene to settle
-        self.sim.step_n(100, render=True)
-        
-        # ===== PERCEPTION-MANIPULATION LOOP =====
+        self.sim.step_n(200, render=True)
+
+        logger.info(f"Products on table: {list(gt_positions.keys())[:self.num_objects]}")
+
         objects_completed = 0
         objects_failed = 0
-        max_iterations = 4  # Max objects to handle
-        
-        for obj_iter in range(max_iterations):
-            if self.planner.is_complete():
-                break
-            
-            # --- PERCEPTION ---
-            logger.info(f"\n  [PERCEPTION] Capturing frame...")
+        handled = set()
+        max_picks = self.num_objects + 2  # safety cap
+
+        for pick_iter in range(max_picks):
+            # SCAN: tuck arm aside so the camera sees the whole table
+            self.arm.move_to_scan_pose(render=True)
+            self.sim.step_n(30, render=not self.headless)
+
+            # PERCEPTION: detect + localize all objects on the table
             frame = self.camera.capture_frame(sim_time=self.sim.data.time)
-            
-            # Detection
             det_result = self.detector.detect(frame.rgb, frame.timestamp, frame.frame_id)
-            logger.info(f"  Detected {det_result.num_detections} objects")
-            
-            # Tracking
             tracked = self.tracker.update(det_result)
             detections = [d for d, _ in tracked]
             track_ids = [t for _, t in tracked]
-            
-            # 3D Localization
+
             localized = []
             if frame.has_depth and detections:
                 localized = self.localizer.localize_all(detections, frame.depth, track_ids)
-                logger.info(f"  Localized {len(localized)} objects in 3D")
-                for obj in localized:
-                    logger.info(f"    {obj.class_name}: world=[{obj.position_world[0]:.3f}, "
-                              f"{obj.position_world[1]:.3f}, {obj.position_world[2]:.3f}]")
-            
-            # Evaluate detection/localization
-            self.metrics.record_detection(
-                len(detections), len(gt_positions),
-                det_result.inference_time_ms,
-                [d.confidence for d in detections],
-                matched_count=min(len(detections), len(gt_positions))
-            )
-            
-            if localized:
-                for obj in localized:
-                    if obj.class_name in gt_positions:
-                        self.metrics.record_localization_error(
-                            obj.position_world, gt_positions[obj.class_name]
-                        )
-            
-            # --- VISUALIZATION ---
+
+            # Visualization
             if not self.headless:
                 det_image = self.visualizer.draw_detections(
                     frame.rgb, detections, track_ids,
@@ -211,115 +121,100 @@ class Pipeline:
                 )
                 det_image = self.visualizer.draw_info_panel(det_image, det_result, {
                     'Episode': episode_id,
-                    'Object': f"{obj_iter+1}/{max_iterations}",
+                    'Sorted': f"{objects_completed}/{self.num_objects}",
+                    'Detected': f"{len(localized)}",
                 })
                 cv2.imshow("Vision Pipeline", det_image)
                 cv2.waitKey(1)
-            
-            # --- TASK PLANNING ---
-            if not localized:
-                logger.warning("  No localized objects, skipping...")
-                continue
-            
-            robot_pos = self.arm.get_ee_position()
-            target = self.planner.select_next_target(localized, robot_pos)
-            
-            if target is None:
-                logger.info("  No more targets")
+
+            # Choose closest un-handled object
+            target_obj = None
+            best_dist = 1e9
+            scan_pos = self.arm.get_ee_position()
+            for obj in localized:
+                key = f"{obj.class_name}_{round(obj.position_world[0],2)}_{round(obj.position_world[1],2)}"
+                if obj.class_name in handled:
+                    continue
+                if SceneBuilder.get_destination(obj.class_name) is None:
+                    continue
+                d = np.linalg.norm(obj.position_world[:2] - scan_pos[:2])
+                if d < best_dist:
+                    best_dist = d
+                    target_obj = obj
+
+            if target_obj is None:
+                logger.info("  All detected objects sorted - episode complete!")
                 break
-            
-            # --- MANIPULATION ---
-            logger.info(f"\n  [MANIPULATION] Target: {target.object_name}")
-            pick_start = time.time()
-            
+
+            # Execute pick and place
+            dest = SceneBuilder.get_destination(target_obj.class_name)
+            color = SceneBuilder.get_color_category(target_obj.class_name)
+            logger.info(f"\n  Target: {target_obj.class_name} -> {color} bin")
+
             success = self.pick_place.execute(
-                pick_position=target.pick_position,
-                place_position=target.place_position,
-                object_name=target.object_name,
+                pick_position=target_obj.position_world,
+                place_position=dest,
+                object_name=target_obj.class_name,
             )
-            
-            cycle_time = time.time() - pick_start
-            self.metrics.record_task_attempt(success, success, cycle_time)
-            self.planner.report_result(success)
-            
+
+            handled.add(target_obj.class_name)
             if success:
                 objects_completed += 1
             else:
                 objects_failed += 1
-            
-            # Return to home between picks
-            self.arm.move_to_home(render=True)
-        
-        # Episode results
+
+            self.metrics.record_task_attempt(success, success, time.time() - episode_start)
+
+        # Park at the end
+        self.arm.move_to_scan_pose(render=True)
+
         elapsed = time.time() - episode_start
         total = objects_completed + objects_failed
         success_rate = objects_completed / max(1, total)
-        
+
         result = {
             'episode_id': episode_id,
             'duration': elapsed,
-            'objects_completed': objects_completed,
-            'objects_failed': objects_failed,
+            'completed': objects_completed,
+            'failed': objects_failed,
             'success_rate': success_rate,
         }
-        
-        logger.info(f"\n  Episode {episode_id} done: {objects_completed}/{total} successful ({success_rate:.0%}), {elapsed:.1f}s")
-        
+        logger.info(f"\n  Episode {episode_id}: {objects_completed}/{total} sorted ({success_rate:.0%}), {elapsed:.1f}s")
         return result
-    
+
     def run(self, num_episodes: int = 1) -> dict:
-        """
-        Run multiple episodes and collect results.
-        
-        Args:
-            num_episodes: Number of episodes
-            
-        Returns:
-            Aggregated results
-        """
         all_results = []
-        
         for ep in range(num_episodes):
             result = self.run_episode(episode_id=ep, randomize=(ep > 0))
             all_results.append(result)
-            
-            # Pause between episodes so viewer can show the reset
-            if not self.headless and ep < num_episodes - 1:
-                logger.info("  --- Next episode in 2s ---")
-                time.sleep(2.0)
-            
-            # Check viewer is still open
+
             if not self.sim.is_viewer_alive():
-                logger.info("Viewer closed, stopping")
                 break
-        
-        # Print summary
+
+            if not self.headless and ep < num_episodes - 1:
+                time.sleep(1.5)
+
         self.metrics.print_summary()
-        self.metrics.save_results("pipeline_results.json")
-        
-        avg_success = np.mean([r['success_rate'] for r in all_results])
-        logger.info(f"\n{'='*60}")
-        logger.info(f"  FINAL: {num_episodes} episodes, avg success: {avg_success:.1%}")
-        logger.info(f"{'='*60}")
-        
-        return {'episodes': all_results, 'summary': self.metrics.get_summary()}
-    
+        self.metrics.save_results("factory_results.json")
+
+        avg = np.mean([r['success_rate'] for r in all_results])
+        logger.info(f"\nFINAL: {num_episodes} episodes, avg success: {avg:.1%}")
+        return {'episodes': all_results, 'avg_success': avg}
+
     def shutdown(self):
-        """Clean shutdown."""
         if not self.headless:
             cv2.destroyAllWindows()
         self.sim.shutdown()
-        logger.info("Pipeline shut down")
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Vision-Guided Robotic Pick-and-Place")
-    parser.add_argument('--headless', action='store_true', help='No visualization')
-    parser.add_argument('--episodes', type=int, default=1, help='Number of episodes')
+    parser = argparse.ArgumentParser(description="Factory Pick-and-Place")
+    parser.add_argument('--headless', action='store_true')
+    parser.add_argument('--episodes', type=int, default=3)
+    parser.add_argument('--objects', type=int, default=4, help='Objects per episode (max 8)')
     args = parser.parse_args()
-    
-    pipeline = Pipeline(headless=args.headless)
-    
+
+    pipeline = Pipeline(headless=args.headless, num_objects=min(args.objects, 8))
     try:
         pipeline.run(num_episodes=args.episodes)
     except KeyboardInterrupt:

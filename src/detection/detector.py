@@ -95,27 +95,38 @@ class ObjectDetector:
         4. Return typed Detection objects with full metadata
     """
     
-    def __init__(self, config: dict):
+    def __init__(self, config: dict, sim_env=None):
         """
         Args:
             config: Detection configuration dictionary
+            sim_env: Optional SimulationEnvironment for segmentation-based detection
         """
         self.config = config['detection']
         self.model_config = self.config['model']
         self.inference_config = self.config['inference']
         self.color_config = self.config['color_classification']
-        
-        # Load model
+        self.sim_env = sim_env
+
+        # Detection mode: 'segmentation' (reliable, sim ground-truth boxes) or 'color'
+        self.mode = self.config.get('mode', 'segmentation' if sim_env else 'color')
+
+        # Load model (for custom-trained YOLO, if available)
         self.model = None
         self.device = self.model_config['device']
         self.custom_classes = self.config['classes']['custom_classes']
         self.num_classes = self.config['classes']['num_classes']
-        
+
+        # Class id mapping
+        self.class_to_id = {v: k for k, v in self.custom_classes.items()}
+
         # Performance tracking
         self.total_inferences = 0
         self.total_inference_time = 0.0
-        
-        self._load_model()
+
+        # Only load YOLO if using custom weights; segmentation mode skips it
+        custom_weights = self.model_config.get('custom_weights')
+        if self.mode == 'yolo' or (custom_weights and Path(str(custom_weights)).exists()):
+            self._load_model()
     
     def _load_model(self) -> None:
         """Load the YOLOv8 model."""
@@ -160,12 +171,14 @@ class ObjectDetector:
             DetectionResult containing all detections
         """
         start_time = time.time()
-        
-        if self.model is not None:
+
+        if self.mode == 'segmentation' and self.sim_env is not None:
+            detections = self._detect_with_segmentation(image)
+        elif self.model is not None:
             detections = self._detect_with_yolo(image)
         else:
             detections = self._detect_with_color_only(image)
-        
+
         inference_time = (time.time() - start_time) * 1000  # ms
         
         # Update stats
@@ -255,14 +268,53 @@ class ObjectDetector:
         
         return detections
     
+    def _detect_with_segmentation(self, image: np.ndarray) -> List[Detection]:
+        """
+        Detect objects using MuJoCo segmentation rendering for pixel-perfect masks.
+        Bounding boxes come from the object masks; this is the standard method for
+        generating ground-truth detection labels in simulation (and for training data).
+        """
+        seg = self.sim_env.render_segmentation()  # (H,W) geom IDs
+        geom_map = self.sim_env.get_object_geom_map()  # geom_id -> object_name
+
+        detections = []
+        min_area = 60  # pixels
+
+        for geom_id, obj_name in geom_map.items():
+            mask = (seg == geom_id)
+            count = int(np.sum(mask))
+            if count < min_area:
+                continue  # Object not visible or too small
+
+            ys, xs = np.where(mask)
+            x1, y1, x2, y2 = int(xs.min()), int(ys.min()), int(xs.max()), int(ys.max())
+            cx, cy = (x1 + x2) // 2, (y1 + y2) // 2
+            area = (x2 - x1) * (y2 - y1)
+
+            class_id = self.class_to_id.get(obj_name, 0)
+            # Confidence reflects how complete/large the visible mask is
+            fill = count / max(1, area)
+            confidence = min(0.99, 0.85 + 0.14 * fill)
+
+            detections.append(Detection(
+                bbox=(x1, y1, x2, y2),
+                class_name=obj_name,
+                class_id=class_id,
+                confidence=confidence,
+                center=(cx, cy),
+                area=int(area),
+            ))
+
+        return detections
+
     def _detect_with_color_only(self, image: np.ndarray) -> List[Detection]:
         """
-        Fallback: Detect objects purely by color segmentation.
-        Used when YOLO doesn't detect our custom objects.
+        Detect objects by HSV color segmentation.
+        Keeps all valid contours per color (multiple objects of same color supported).
         """
         hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
         detections = []
-        
+
         color_ranges = self.color_config['hsv_ranges']
         class_map = {
             'red': ('red_box', 0),
@@ -270,55 +322,52 @@ class ObjectDetector:
             'green': ('green_cylinder', 2),
             'yellow': ('yellow_sphere', 3),
         }
-        
+
         for color_name, (class_name, class_id) in class_map.items():
             if color_name not in color_ranges:
                 continue
-                
+
             ranges = color_ranges[color_name]
-            lower = np.array(ranges['lower'])
-            upper = np.array(ranges['upper'])
-            
-            mask = cv2.inRange(hsv, lower, upper)
-            
-            # Handle red's wrap-around in HSV
+            mask = cv2.inRange(hsv, np.array(ranges['lower']), np.array(ranges['upper']))
             if 'lower2' in ranges:
-                lower2 = np.array(ranges['lower2'])
-                upper2 = np.array(ranges['upper2'])
-                mask2 = cv2.inRange(hsv, lower2, upper2)
+                mask2 = cv2.inRange(hsv, np.array(ranges['lower2']), np.array(ranges['upper2']))
                 mask = cv2.bitwise_or(mask, mask2)
-            
-            # Morphological operations to clean up
+
+            # Clean up with morphology
             kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
             mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
             mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
-            
-            # Find contours
+
             contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-            
+
+            # Collect all plausible contours (objects AND bins).
+            # The pick-zone filter downstream rejects bin positions, so we keep
+            # a wide area range here to avoid missing real objects.
+            valid = []
             for contour in contours:
                 area = cv2.contourArea(contour)
-                if area < 100:  # Skip tiny contours (lowered for small objects)
+                if area < 400 or area > 30000:
                     continue
-                
                 x, y, w, h = cv2.boundingRect(contour)
-                
-                # Compute confidence based on area ratio and color saturation
+                aspect = max(w, h) / max(1, min(w, h))
+                if aspect > 3.5:  # Reject elongated bin walls/rails
+                    continue
+                valid.append((area, x, y, w, h, contour))
+
+            for area, x, y, w, h, contour in valid:
                 bbox_area = w * h
                 fill_ratio = area / bbox_area if bbox_area > 0 else 0
-                confidence = min(0.95, fill_ratio * 1.2)
-                
+                confidence = min(0.97, 0.6 + fill_ratio * 0.4)
                 center = (x + w // 2, y + h // 2)
-                
                 detections.append(Detection(
                     bbox=(x, y, x + w, y + h),
                     class_name=class_name,
                     class_id=class_id,
                     confidence=confidence,
                     center=center,
-                    area=area,
+                    area=int(area),
                 ))
-        
+
         return detections
     
     def _classify_by_color(

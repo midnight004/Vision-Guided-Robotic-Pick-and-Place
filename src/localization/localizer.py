@@ -161,9 +161,10 @@ class ObjectLocalizer:
         Returns:
             LocalizedObject or None
         """
-        # Get depth at detection center
+        # Use minimum depth in region = closest surface = the object's top face
+        # (median would be biased by surrounding table pixels for small objects)
         depth = self.depth_processor.get_depth_at_bbox(
-            depth_image, detection.bbox, method="center_region"
+            depth_image, detection.bbox, method="min_region"
         )
         
         if depth <= 0:
@@ -223,14 +224,14 @@ class ObjectLocalizer:
             tid = track_ids[i] if track_ids and i < len(track_ids) else None
             obj = self.localize_detection(det, depth_image, tid)
             if obj is not None:
-                # PICK ZONE FILTER:
-                # Only accept objects in the central pick area
-                # This prevents picking objects already placed in bins
+                # PICK ZONE FILTER: only objects in the work area
+                # Table is at z≈0.30, objects at z≈0.31-0.35
+                # Bins are at y=±0.28, so exclude |y| > 0.22
                 px, py, pz = obj.position_world
                 in_pick_zone = (
-                    0.35 <= px <= 0.60 and
-                    -0.18 <= py <= 0.18 and
-                    0.30 <= pz <= 0.45
+                    0.30 <= px <= 0.70 and
+                    -0.22 <= py <= 0.22 and
+                    0.28 <= pz <= 0.50
                 )
                 if in_pick_zone:
                     localized.append(obj)
