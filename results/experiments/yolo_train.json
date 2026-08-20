@@ -1,0 +1,30 @@
+{
+  "config": {
+    "base_model": "yolov8n.pt",
+    "imgsz": 416,
+    "device": "cpu",
+    "data": "datasets/factory/data.yaml",
+    "note": "validated from converged best.pt checkpoint"
+  },
+  "val_metrics": {
+    "precision": 0.9387843981099298,
+    "recall": 0.9040607300694014,
+    "mAP50": 0.9363380425765337,
+    "mAP50_95": 0.6910224112795951,
+    "per_class_mAP50": {
+      "red": 0.9588023360287511,
+      "blue": 0.9444085201242038,
+      "green": 0.9549854021466455,
+      "yellow": 0.8995341866559594,
+      "unknown": 0.9239597679271088
+    }
+  },
+  "inference": {
+    "avg_latency_ms": 19.901180267333984,
+    "fps": 50.24827606036065,
+    "n_images": 50
+  },
+  "weights": "C:\\Users\\RABAH\\Desktop\\VISION ROBOT\\models\\factory_yolov8n.pt",
+  "runs_dir": "C:\\Users\\RABAH\\Desktop\\VISION ROBOT\\runs\\detect\\runs\\detect\\factory_yolo",
+  "timestamp": "2026-08-20 22:00:00"
+}

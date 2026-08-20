@@ -1,0 +1,91 @@
+{
+  "scenario": "moving object on conveyor",
+  "trials": 8,
+  "single_id_rate": 1.0,
+  "total_id_switches": 0,
+  "mean_frames_detected": 40.0,
+  "mean_frames_tracked": 39.875,
+  "detection_without_confirmed_track": 1,
+  "per_trial": [
+    {
+      "object": "red_box",
+      "frames_detected": 40,
+      "frames_with_track": 40,
+      "distinct_ids": [
+        1
+      ],
+      "id_switches": 0,
+      "single_id": true
+    },
+    {
+      "object": "blue_box",
+      "frames_detected": 40,
+      "frames_with_track": 40,
+      "distinct_ids": [
+        1
+      ],
+      "id_switches": 0,
+      "single_id": true
+    },
+    {
+      "object": "green_cylinder",
+      "frames_detected": 40,
+      "frames_with_track": 40,
+      "distinct_ids": [
+        1
+      ],
+      "id_switches": 0,
+      "single_id": true
+    },
+    {
+      "object": "yellow_sphere",
+      "frames_detected": 40,
+      "frames_with_track": 39,
+      "distinct_ids": [
+        1
+      ],
+      "id_switches": 0,
+      "single_id": true
+    },
+    {
+      "object": "red_can",
+      "frames_detected": 40,
+      "frames_with_track": 40,
+      "distinct_ids": [
+        1
+      ],
+      "id_switches": 0,
+      "single_id": true
+    },
+    {
+      "object": "blue_capsule",
+      "frames_detected": 40,
+      "frames_with_track": 40,
+      "distinct_ids": [
+        1
+      ],
+      "id_switches": 0,
+      "single_id": true
+    },
+    {
+      "object": "green_box",
+      "frames_detected": 40,
+      "frames_with_track": 40,
+      "distinct_ids": [
+        1
+      ],
+      "id_switches": 0,
+      "single_id": true
+    },
+    {
+      "object": "yellow_bottle",
+      "frames_detected": 40,
+      "frames_with_track": 40,
+      "distinct_ids": [
+        1
+      ],
+      "id_switches": 0,
+      "single_id": true
+    }
+  ]
+}

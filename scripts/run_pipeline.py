@@ -163,7 +163,10 @@ class Pipeline:
             color_class = target_obj.class_name           # detected color category
             bin_name = SceneBuilder.get_bin_name(color_class)
             dest = SceneBuilder.get_destination(color_class)
-            true_name = getattr(target_obj, 'true_name', item_name)
+            # Segmentation sets true_name; the YOLO backend does not. Since exactly
+            # one item is fed per iteration, fall back to the fed item_name so the
+            # landing check, failure parking, and evaluation identify the object.
+            true_name = getattr(target_obj, 'true_name', '') or item_name
 
             logger.info(f"\n  Item: {true_name} -> detected '{color_class}' -> {bin_name.upper()} bin")
 
