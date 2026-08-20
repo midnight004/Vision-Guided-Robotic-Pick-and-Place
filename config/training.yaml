@@ -1,0 +1,22 @@
+# ==============================================================================
+# YOLO Training Configuration (learned detector, Phase 3)
+# CPU training is the default (project runs on an AMD GPU without CUDA).
+# ==============================================================================
+
+training:
+  base_model: "yolov8n.pt"          # lightweight, downloaded by ultralytics
+  data: "datasets/factory/data.yaml"
+  epochs: 60
+  imgsz: 416                        # smaller than 640 to keep CPU training tractable
+  batch: 16
+  device: "cpu"
+  workers: 4
+  patience: 20                      # early stop if no val improvement
+  seed: 7
+  project: "runs/detect"
+  name: "factory_yolo"
+  export_to: "models/factory_yolov8n.pt"
+
+inference:
+  conf_threshold: 0.35
+  iou_threshold: 0.50

@@ -1,0 +1,91 @@
+# ==============================================================================
+# Synthetic Dataset Generation Configuration
+# Renders randomized RGB frames from the MuJoCo scene with ground-truth
+# bounding-box labels derived from segmentation masks.
+# Deterministic given a seed.
+# ==============================================================================
+
+dataset:
+  output_dir: "datasets/factory"
+  seed: 7
+
+  # Number of images
+  num_train: 800
+  num_val: 200
+
+  # Detector classes (color categories). IDs MUST match
+  # detector.class_to_id: red=0, blue=1, green=2, yellow=3, unknown=4
+  class_names: ["red", "blue", "green", "yellow", "unknown"]
+
+  # How many products to place per image
+  objects_per_image: [1, 6]     # inclusive range
+
+  # Placement region on the table (world meters). Objects are scattered here.
+  workspace:
+    x: [0.34, 0.66]
+    y: [-0.26, 0.14]
+    z: 0.33
+
+  # Minimum visible pixels for an object to be labeled (handles heavy occlusion)
+  min_visible_pixels: 40
+
+  # Save extra ground truth alongside images (for inspection / Phase 5)
+  save_depth: false            # save a subset of depth maps as .npy
+  depth_subset: 40
+
+  # ---- Domain randomization ----
+  randomize:
+    # Overhead camera pose jitter (kept small so localization stays valid)
+    camera_pos_jitter_m: 0.04       # +/- meters on x,y,z
+    camera_fovy_jitter_deg: 1.5     # +/- degrees
+
+    # Lighting
+    light_intensity: [0.20, 0.55]   # per-channel diffuse range
+    light_pos_jitter_m: 0.25
+
+    # Appearance: brightness/saturation jitter that does NOT change the color
+    # category (keeps labels valid). Applied as small rgba perturbation.
+    object_rgba_jitter: 0.06
+
+    # Background: floor/table color jitter
+    floor_gray: [0.10, 0.30]
+    table_gray: [0.28, 0.45]
+
+    # Sensor noise
+    image_gaussian_std: 4.0         # 0-255 scale, applied to RGB
+    depth_gaussian_std_m: 0.003
+    depth_dropout_prob: 0.01
+
+    # Occlusion: probability that two objects are placed close together
+    cluster_prob: 0.35
+    cluster_radius_m: 0.06
+
+# A second, harder distribution for Phase 7 robustness testing.
+# Larger jitter than the training distribution.
+dataset_ood:
+  output_dir: "datasets/factory_ood"
+  seed: 99
+  num_train: 0
+  num_val: 200
+  class_names: ["red", "blue", "green", "yellow", "unknown"]
+  objects_per_image: [1, 6]
+  workspace:
+    x: [0.32, 0.68]
+    y: [-0.28, 0.16]
+    z: 0.33
+  min_visible_pixels: 40
+  save_depth: false
+  depth_subset: 0
+  randomize:
+    camera_pos_jitter_m: 0.09
+    camera_fovy_jitter_deg: 4.0
+    light_intensity: [0.12, 0.75]
+    light_pos_jitter_m: 0.5
+    object_rgba_jitter: 0.12
+    floor_gray: [0.05, 0.40]
+    table_gray: [0.20, 0.55]
+    image_gaussian_std: 9.0
+    depth_gaussian_std_m: 0.006
+    depth_dropout_prob: 0.03
+    cluster_prob: 0.55
+    cluster_radius_m: 0.05

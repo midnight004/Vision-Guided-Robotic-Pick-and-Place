@@ -47,7 +47,17 @@ class PickPlaceExecutor:
         self.successful_places = 0
         logger.info("PickPlaceExecutor initialized (real physics)")
 
-    def execute(self, pick_position: np.ndarray, place_position: np.ndarray, object_name: str = "unknown") -> bool:
+    def execute(self, pick_position: np.ndarray, place_position: np.ndarray,
+                object_name: str = "unknown", relocalize_fn=None) -> bool:
+        """
+        Run one pick-and-place cycle.
+
+        relocalize_fn (optional, Phase 10 visual servoing): a callback invoked
+        once from the approach pose that returns a refined pick position (or
+        None). When provided, the descend target is corrected using a fresh
+        visual observation before grasping. Default None reproduces the exact
+        baseline behavior.
+        """
         self.total_attempts += 1
         logger.info(f"=== PICK AND PLACE: {object_name} ===")
         logger.info(f"  Pick:  [{pick_position[0]:.3f}, {pick_position[1]:.3f}, {pick_position[2]:.3f}]")
@@ -65,6 +75,15 @@ class PickPlaceExecutor:
             approach_pos[2] += self.APPROACH_HEIGHT
             if not self.arm.move_to_cartesian(approach_pos, duration=1.5):
                 return self._fail("Cannot reach approach")
+
+            # 2b. VISUAL SERVOING (optional): refine the pick target from a fresh
+            #     observation taken at the approach pose, then correct XY.
+            if relocalize_fn is not None:
+                refined = relocalize_fn()
+                if refined is not None:
+                    corr = float(np.linalg.norm(refined[:2] - pick_position[:2]))
+                    pick_position = np.array([refined[0], refined[1], pick_position[2]])
+                    logger.info(f"  Visual servo correction: {corr*100:.1f} mm")
 
             # 3. DESCEND to grasp height
             self.state = PickPlaceState.DESCEND

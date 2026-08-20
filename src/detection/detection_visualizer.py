@@ -16,13 +16,19 @@ from ..utils.logger import setup_logger
 logger = setup_logger("detection_viz")
 
 
-# Class-specific colors (BGR)
+# Class-specific colors (BGR). Keys cover the color-category taxonomy used by
+# both the segmentation and the learned YOLO backends, plus legacy object names.
 CLASS_COLORS = {
+    'red': (0, 0, 220),
+    'blue': (220, 0, 0),
+    'green': (0, 200, 0),
+    'yellow': (0, 220, 220),
+    'unknown': (128, 128, 128),
+    # legacy object-type keys
     'red_box': (0, 0, 220),
     'blue_box': (220, 0, 0),
     'green_cylinder': (0, 200, 0),
     'yellow_sphere': (0, 220, 220),
-    'unknown': (128, 128, 128),
 }
 
 
@@ -173,10 +179,12 @@ class DetectionVisualizer:
         vis = image.copy()
         
         # Info lines
+        inf_ms = detection_result.inference_time_ms
+        fps = 1000.0 / inf_ms if inf_ms > 0 else 0.0
         info_lines = [
             f"Frame: {detection_result.frame_id}",
             f"Detections: {detection_result.num_detections}",
-            f"Inference: {detection_result.inference_time_ms:.1f}ms",
+            f"Inference: {inf_ms:.1f}ms ({fps:.0f} FPS)",
         ]
         
         # Class breakdown

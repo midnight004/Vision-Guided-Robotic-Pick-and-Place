@@ -12,14 +12,14 @@ detection:
   model:
     architecture: "yolov8"
     variant: "yolov8n"  # nano for speed, can use yolov8s/m for accuracy
-    weights: "yolov8n.pt"  # pretrained, or custom weights path
-    custom_weights: null  # path to custom trained weights if available
-    device: "cuda"  # cuda or cpu
-    half_precision: true  # FP16 inference
+    weights: "yolov8n.pt"  # pretrained fallback
+    custom_weights: "models/factory_yolov8n.pt"  # trained on synthetic dataset (Phase 3)
+    device: "cpu"  # AMD GPU has no CUDA; CPU inference
+    half_precision: false  # FP16 not used on CPU
 
   # Inference settings
   inference:
-    confidence_threshold: 0.5
+    confidence_threshold: 0.4
     nms_iou_threshold: 0.45
     max_detections: 20
     input_size: [640, 640]  # YOLO input resolution

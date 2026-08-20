@@ -37,6 +37,14 @@ results/metrics/*.json
 results/visualizations/*.png
 results/visualizations/*.mp4
 
+# Synthetic datasets (regenerate deterministically: scripts/generate_dataset.py)
+datasets/
+# YOLO training run artifacts (weights are exported to models/)
+runs/
+# Ultralytics auto-downloaded base weights
+yolov8n.pt
+yolo11n.pt
+
 # System
 .DS_Store
 Thumbs.db

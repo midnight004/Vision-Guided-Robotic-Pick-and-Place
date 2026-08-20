@@ -201,11 +201,18 @@ class ObjectDetector:
         
         return result
     
+    # Color categories the learned detector is trained to predict.
+    COLOR_CLASSES = {"red", "blue", "green", "yellow", "unknown"}
+
     def _detect_with_yolo(self, image: np.ndarray) -> List[Detection]:
         """
-        Run YOLO inference and classify detections by color.
+        Run the learned YOLO detector.
+
+        When the model was trained on our color taxonomy (red/blue/green/yellow/
+        unknown), its predicted class is used directly as the sorting category
+        (genuine learned classification). Otherwise (e.g. a generic pretrained
+        model) it falls back to HSV color classification within each box.
         """
-        # Run YOLO inference
         results = self.model(
             image,
             conf=self.inference_config['confidence_threshold'],
@@ -215,45 +222,39 @@ class ObjectDetector:
             half=self.model_config['half_precision'] and self.device == 'cuda',
             verbose=False,
         )
-        
+
+        model_names = getattr(self.model, 'names', {}) or {}
+        learned_taxonomy = set(model_names.values()) <= self.COLOR_CLASSES and len(model_names) > 0
+
         detections = []
-        
         if results and len(results) > 0:
-            result = results[0]
-            boxes = result.boxes
-            
+            boxes = results[0].boxes
             if boxes is not None and len(boxes) > 0:
                 for i in range(len(boxes)):
-                    # Get bbox coordinates
                     xyxy = boxes.xyxy[i].cpu().numpy()
                     x1, y1, x2, y2 = int(xyxy[0]), int(xyxy[1]), int(xyxy[2]), int(xyxy[3])
-                    
                     conf = float(boxes.conf[i].cpu())
                     yolo_class = int(boxes.cls[i].cpu())
-                    
-                    # Filter by relevant COCO classes if using pretrained
-                    # Classes that might detect our objects: 
-                    # book(73), cell phone(67), bottle(39), cup(41), etc.
-                    # Or simply use all detections and classify by color
-                    
-                    # Classify by color within the bounding box
-                    if self.color_config['enabled']:
+
+                    if learned_taxonomy:
+                        # Use the model's own class prediction as the color category
+                        class_name = model_names[yolo_class]
+                        class_id = self.class_to_id.get(class_name, 99)
+                        combined_conf = conf
+                    elif self.color_config['enabled']:
                         class_name, class_id, color_conf = self._classify_by_color(
-                            image, (x1, y1, x2, y2)
-                        )
-                        # Combine YOLO confidence with color confidence
+                            image, (x1, y1, x2, y2))
                         combined_conf = conf * color_conf
                     else:
                         class_name = self.custom_classes.get(yolo_class, f"class_{yolo_class}")
                         class_id = yolo_class
                         combined_conf = conf
-                    
+
                     if class_name is None:
-                        continue  # Skip if color not recognized
-                    
+                        continue
+
                     center = ((x1 + x2) // 2, (y1 + y2) // 2)
                     area = (x2 - x1) * (y2 - y1)
-                    
                     detections.append(Detection(
                         bbox=(x1, y1, x2, y2),
                         class_name=class_name,
@@ -262,11 +263,7 @@ class ObjectDetector:
                         center=center,
                         area=area,
                     ))
-        
-        # If YOLO finds nothing, fall back to color detection
-        if not detections and self.color_config['enabled']:
-            detections = self._detect_with_color_only(image)
-        
+
         return detections
     
     def _detect_with_segmentation(self, image: np.ndarray) -> List[Detection]:
