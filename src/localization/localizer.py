@@ -43,6 +43,9 @@ class LocalizedObject:
     
     # Depth
     depth: float  # meters
+
+    # Ground-truth object name (for evaluation/logging only)
+    true_name: str = ""
     
     def to_dict(self) -> dict:
         return {
@@ -199,6 +202,7 @@ class ObjectLocalizer:
             position_camera=point_camera,
             position_world=point_world,
             depth=depth,
+            true_name=getattr(detection, 'true_name', ''),
         )
     
     def localize_all(
@@ -224,13 +228,12 @@ class ObjectLocalizer:
             tid = track_ids[i] if track_ids and i < len(track_ids) else None
             obj = self.localize_detection(det, depth_image, tid)
             if obj is not None:
-                # PICK ZONE FILTER: only objects in the work area
-                # Table is at z≈0.30, objects at z≈0.31-0.35
-                # Bins are at y=±0.28, so exclude |y| > 0.22
+                # PICK ZONE FILTER: staging area at front-center of the table.
+                # Bins sit at y=+-0.30, so we exclude those rows.
                 px, py, pz = obj.position_world
                 in_pick_zone = (
                     0.30 <= px <= 0.70 and
-                    -0.22 <= py <= 0.22 and
+                    -0.26 <= py <= 0.12 and
                     0.28 <= pz <= 0.50
                 )
                 if in_pick_zone:

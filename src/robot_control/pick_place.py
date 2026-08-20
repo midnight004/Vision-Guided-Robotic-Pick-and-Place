@@ -33,10 +33,10 @@ class PickPlaceExecutor:
     # Heights relative to object / world Z
     APPROACH_HEIGHT = 0.15     # Above object for approach
     GRASP_Z_OFFSET = 0.058    # Hand-to-fingertip offset (measured from Menagerie model)
-    LIFT_HEIGHT = 0.58         # Absolute Z after lift (high to clear bin walls)
-    TRANSPORT_HEIGHT = 0.58    # Absolute Z during transport (stays high)
-    PLACE_HEIGHT_OFFSET = 0.18 # Release well above the bin so object drops in cleanly
-    RETREAT_HEIGHT = 0.58      # Absolute Z after release
+    LIFT_HEIGHT = 0.56         # Absolute Z after lift
+    TRANSPORT_HEIGHT = 0.56    # Absolute Z during transport (object hangs ~9cm below, clears 0.40 bin walls)
+    PLACE_HEIGHT_OFFSET = 0.10 # Release above bin floor (object drops in cleanly)
+    RETREAT_HEIGHT = 0.56      # Absolute Z after release
 
     def __init__(self, arm: ArmController, gripper: GripperController):
         self.arm = arm
@@ -73,39 +73,45 @@ class PickPlaceExecutor:
             if not self.arm.move_to_cartesian(grasp_pos, duration=1.2):
                 return self._fail("Cannot descend")
 
-            # 4. GRASP - close fingers around object
+            # 4. GRASP - close fingers around object. If nothing is captured,
+            #    re-open, re-descend and retry once before giving up.
             self.state = PickPlaceState.GRASP
-            self.gripper.close(steps=250)
+            grasped = self.gripper.close(steps=250)
+            if not grasped:
+                logger.info("  Empty grasp - realigning and retrying")
+                self.gripper.open(steps=60)
+                self.arm.move_to_cartesian(grasp_pos, duration=1.0)
+                grasped = self.gripper.close(steps=250)
+            if not grasped:
+                return self._fail("Nothing grasped")
             self.successful_picks += 1
-            # Real physics: if object is between fingers, friction holds it
-            # If not, it will fall during lift (natural failure)
 
-            # 5. LIFT
+            # 5. LIFT (slow, straight up, to keep a firm grip)
             self.state = PickPlaceState.LIFT
             lift_pos = pick_position.copy()
             lift_pos[2] = self.LIFT_HEIGHT
-            if not self.arm.move_to_cartesian(lift_pos, duration=1.2):
+            if not self.arm.move_to_cartesian(lift_pos, duration=2.0):
                 return self._fail("Cannot lift")
 
-            # 6. TRANSPORT above destination
+            # 6. TRANSPORT above destination (slow to avoid slipping)
             self.state = PickPlaceState.TRANSPORT
             transport_pos = place_position.copy()
             transport_pos[2] = self.TRANSPORT_HEIGHT
-            if not self.arm.move_to_cartesian(transport_pos, duration=1.5):
+            if not self.arm.move_to_cartesian(transport_pos, duration=2.5):
                 return self._fail("Cannot transport")
 
-            # 7. LOWER to place height
+            # 7. LOWER to place height (slow)
             self.state = PickPlaceState.LOWER
             lower_pos = place_position.copy()
             lower_pos[2] += self.PLACE_HEIGHT_OFFSET
-            if not self.arm.move_to_cartesian(lower_pos, duration=1.0):
+            if not self.arm.move_to_cartesian(lower_pos, duration=1.5):
                 return self._fail("Cannot lower")
 
-            # 8. RELEASE
+            # 8. RELEASE and let the object settle into the bin
             self.state = PickPlaceState.RELEASE
-            self.gripper.open(steps=100)
+            self.gripper.open(steps=120)
 
-            # 9. RETREAT
+            # 9. RETREAT straight up (don't drag through the object)
             self.state = PickPlaceState.RETREAT
             retreat_pos = lower_pos.copy()
             retreat_pos[2] = self.RETREAT_HEIGHT
@@ -123,8 +129,10 @@ class PickPlaceExecutor:
     def _fail(self, reason: str) -> bool:
         self.state = PickPlaceState.FAILED
         logger.error(f"  FAILED: {reason}")
-        # Open gripper on failure to release any partial grasp
+        # Release any partial grasp and return to a clean pose so the next
+        # attempt starts from a known-good configuration (avoids cascading IK failures).
         self.gripper.open(steps=50)
+        self.arm.move_to_scan_pose(render=True)
         return False
 
     def get_statistics(self) -> dict:

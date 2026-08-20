@@ -15,7 +15,7 @@ sys.path.insert(0, str(project_root))
 
 import yaml
 from src.simulation.environment import SimulationEnvironment
-from src.simulation.scene_builder import SceneBuilder, PRODUCT_TO_COLOR, DESTINATIONS
+from src.simulation.scene_builder import SceneBuilder, DESTINATIONS
 from src.camera.camera_interface import CameraInterface
 from src.camera.depth_processor import DepthProcessor
 from src.detection.detector import ObjectDetector
@@ -84,93 +84,102 @@ class Pipeline:
         logger.info(f"\n{'='*40} EPISODE {episode_id} {'='*40}")
         episode_start = time.time()
 
-        # Reset
-        gt_positions = self.sim.reset_objects(randomize=randomize, num_objects=self.num_objects)
-        self.arm.move_to_home(render=True)
+        # Reset: park everything, arm to scan pose
+        self.sim.reset_objects()
+        self.arm.move_to_scan_pose(render=True)
         self.tracker.reset()
-        self.sim.step_n(200, render=True)
 
-        logger.info(f"Products on table: {list(gt_positions.keys())[:self.num_objects]}")
+        # Build a randomized queue for this episode (mix of known + unknown items)
+        queue = self.sim.build_episode_queue(self.num_objects, unknown_ratio=0.3)
+        logger.info(f"Conveyor queue ({len(queue)} items): {queue}")
 
         objects_completed = 0
         objects_failed = 0
-        handled = set()
-        max_picks = self.num_objects + 2  # safety cap
+        correct_sorts = 0
 
-        for pick_iter in range(max_picks):
-            # SCAN: tuck arm aside so the camera sees the whole table
-            self.arm.move_to_scan_pose(render=True)
-            self.sim.step_n(30, render=not self.headless)
+        for item_idx, item_name in enumerate(queue):
+            # FEED: conveyor delivers the next item to the staging area
+            self.arm.move_to_scan_pose(render=not self.headless)
+            self.sim.feed_object(item_name, render=not self.headless)
 
-            # PERCEPTION: detect + localize all objects on the table
+            # PERCEIVE: capture frame, detect + classify by color, localize in 3D
+            # (single-shot detection per fed item; no tracker needed)
             frame = self.camera.capture_frame(sim_time=self.sim.data.time)
             det_result = self.detector.detect(frame.rgb, frame.timestamp, frame.frame_id)
-            tracked = self.tracker.update(det_result)
-            detections = [d for d, _ in tracked]
-            track_ids = [t for _, t in tracked]
+            detections = det_result.detections
 
             localized = []
             if frame.has_depth and detections:
-                localized = self.localizer.localize_all(detections, frame.depth, track_ids)
+                localized = self.localizer.localize_all(detections, frame.depth)
 
-            # Visualization
             if not self.headless:
                 det_image = self.visualizer.draw_detections(
-                    frame.rgb, detections, track_ids,
-                    [obj.position_world for obj in localized] if localized else None
+                    frame.rgb, detections, None,
+                    [o.position_world for o in localized] if localized else None
                 )
                 det_image = self.visualizer.draw_info_panel(det_image, det_result, {
                     'Episode': episode_id,
-                    'Sorted': f"{objects_completed}/{self.num_objects}",
-                    'Detected': f"{len(localized)}",
+                    'Item': f"{item_idx+1}/{len(queue)}",
+                    'Sorted': f"{objects_completed}",
                 })
                 cv2.imshow("Vision Pipeline", det_image)
                 cv2.waitKey(1)
 
-            # Choose closest un-handled object
+            # Pick the object in the staging zone (closest to staging point)
             target_obj = None
             best_dist = 1e9
-            scan_pos = self.arm.get_ee_position()
+            staging = np.array([0.5, -0.12])
             for obj in localized:
-                key = f"{obj.class_name}_{round(obj.position_world[0],2)}_{round(obj.position_world[1],2)}"
-                if obj.class_name in handled:
-                    continue
-                if SceneBuilder.get_destination(obj.class_name) is None:
-                    continue
-                d = np.linalg.norm(obj.position_world[:2] - scan_pos[:2])
+                d = np.linalg.norm(obj.position_world[:2] - staging)
                 if d < best_dist:
                     best_dist = d
                     target_obj = obj
 
             if target_obj is None:
-                logger.info("  All detected objects sorted - episode complete!")
-                break
+                logger.warning(f"  Item {item_name} not detected in staging - skipping")
+                objects_failed += 1
+                continue
 
-            # Execute pick and place
-            dest = SceneBuilder.get_destination(target_obj.class_name)
-            color = SceneBuilder.get_color_category(target_obj.class_name)
-            logger.info(f"\n  Target: {target_obj.class_name} -> {color} bin")
+            color_class = target_obj.class_name           # detected color category
+            bin_name = SceneBuilder.get_bin_name(color_class)
+            dest = SceneBuilder.get_destination(color_class)
+            true_name = getattr(target_obj, 'true_name', item_name)
+
+            logger.info(f"\n  Item: {true_name} -> detected '{color_class}' -> {bin_name.upper()} bin")
 
             success = self.pick_place.execute(
                 pick_position=target_obj.position_world,
                 place_position=dest,
-                object_name=target_obj.class_name,
+                object_name=f"{true_name}({color_class})",
             )
 
-            handled.add(target_obj.class_name)
-            if success:
+            # Verify the object physically landed inside the target bin
+            landed = self._landed_in_bin(true_name, dest)
+            expected_bin = self._expected_bin(true_name)
+            routed_right = (bin_name == expected_bin)
+
+            if success and landed:
                 objects_completed += 1
+                if routed_right:
+                    correct_sorts += 1
+                logger.info(f"  LANDED in {bin_name.upper()} bin"
+                            f" ({'correct' if routed_right else 'wrong bin'})")
             else:
                 objects_failed += 1
+                reason = "arm motion failed" if not success else "missed bin"
+                logger.warning(f"  NOT PLACED ({reason})")
+                # Clear the failed item off the table so it doesn't corrupt the
+                # next detection/localization cycle.
+                self.sim.park_object(true_name)
 
             self.metrics.record_task_attempt(success, success, time.time() - episode_start)
 
-        # Park at the end
         self.arm.move_to_scan_pose(render=True)
 
         elapsed = time.time() - episode_start
         total = objects_completed + objects_failed
-        success_rate = objects_completed / max(1, total)
+        success_rate = objects_completed / max(1, len(queue))
+        sort_accuracy = correct_sorts / max(1, objects_completed)
 
         result = {
             'episode_id': episode_id,
@@ -178,9 +187,33 @@ class Pipeline:
             'completed': objects_completed,
             'failed': objects_failed,
             'success_rate': success_rate,
+            'sort_accuracy': sort_accuracy,
         }
-        logger.info(f"\n  Episode {episode_id}: {objects_completed}/{total} sorted ({success_rate:.0%}), {elapsed:.1f}s")
+        logger.info(f"\n  Episode {episode_id}: {objects_completed}/{len(queue)} handled, "
+                    f"sort accuracy {sort_accuracy:.0%}, {elapsed:.1f}s")
         return result
+
+    def _landed_in_bin(self, object_name: str, dest, xy_tol: float = 0.08,
+                       z_max: float = 0.45) -> bool:
+        """Confirm the object's actual final position is inside the target bin."""
+        pos = self.sim.get_object_position(object_name)
+        if pos is None:
+            return False
+        dxy = float(np.linalg.norm(pos[:2] - np.asarray(dest)[:2]))
+        return dxy <= xy_tol and pos[2] <= z_max
+
+    @staticmethod
+    def _expected_bin(true_name: str) -> str:
+        """Ground-truth bin for evaluating sort correctness."""
+        if true_name.startswith("red"):
+            return "red"
+        if true_name.startswith("blue"):
+            return "blue"
+        if true_name.startswith("green"):
+            return "green"
+        if true_name.startswith("yellow"):
+            return "yellow"
+        return "trash"  # purple, orange, white, black
 
     def run(self, num_episodes: int = 1) -> dict:
         all_results = []
@@ -211,10 +244,10 @@ def main():
     parser = argparse.ArgumentParser(description="Factory Pick-and-Place")
     parser.add_argument('--headless', action='store_true')
     parser.add_argument('--episodes', type=int, default=3)
-    parser.add_argument('--objects', type=int, default=4, help='Objects per episode (max 8)')
+    parser.add_argument('--objects', type=int, default=6, help='Items fed per episode (max 14)')
     args = parser.parse_args()
 
-    pipeline = Pipeline(headless=args.headless, num_objects=min(args.objects, 8))
+    pipeline = Pipeline(headless=args.headless, num_objects=min(args.objects, 14))
     try:
         pipeline.run(num_episodes=args.episodes)
     except KeyboardInterrupt:

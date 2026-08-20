@@ -22,33 +22,62 @@ JOINT_NAMES = [f"joint{i}" for i in range(1, 8)]
 ACTUATOR_NAMES = [f"actuator{i}" for i in range(1, 9)]  # 8th = gripper tendon
 FINGER_JOINT_NAMES = ["finger_joint1", "finger_joint2"]
 
-# 8 products in the factory
+# Full product pool: 14 items (8 known-color + 6 unknown)
 OBJECT_NAMES = [
-    "red_box", "blue_box", "green_cylinder", "yellow_sphere",
-    "red_can", "blue_capsule", "green_box", "yellow_bottle"
+    "red_box", "red_can", "blue_box", "blue_capsule",
+    "green_cylinder", "green_box", "yellow_sphere", "yellow_bottle",
+    "purple_box", "orange_sphere", "white_cylinder", "black_box",
+    "purple_cylinder", "orange_box",
+]
+
+# Known-color items go to color bins; unknown items go to trash
+KNOWN_OBJECTS = [
+    "red_box", "red_can", "blue_box", "blue_capsule",
+    "green_cylinder", "green_box", "yellow_sphere", "yellow_bottle",
+]
+UNKNOWN_OBJECTS = [
+    "purple_box", "orange_sphere", "white_cylinder", "black_box",
+    "purple_cylinder", "orange_box",
 ]
 
 OBJECT_JOINT_NAMES = {
     "red_box": "red_box_joint",
-    "blue_box": "blue_box_joint",
-    "green_cylinder": "green_cyl_joint",
-    "yellow_sphere": "yellow_sph_joint",
     "red_can": "red_can_joint",
+    "blue_box": "blue_box_joint",
     "blue_capsule": "blue_cap_joint",
+    "green_cylinder": "green_cyl_joint",
     "green_box": "green_box_joint",
+    "yellow_sphere": "yellow_sph_joint",
     "yellow_bottle": "yellow_bot_joint",
+    "purple_box": "purple_box_joint",
+    "orange_sphere": "orange_sph_joint",
+    "white_cylinder": "white_cyl_joint",
+    "black_box": "black_box_joint",
+    "purple_cylinder": "purple_cyl_joint",
+    "orange_box": "orange_box_joint",
 }
 
 OBJECT_GEOM_NAMES = {
     "red_box": "red_box_geom",
-    "blue_box": "blue_box_geom",
-    "green_cylinder": "green_cyl_geom",
-    "yellow_sphere": "yellow_sph_geom",
     "red_can": "red_can_geom",
+    "blue_box": "blue_box_geom",
     "blue_capsule": "blue_cap_geom",
+    "green_cylinder": "green_cyl_geom",
     "green_box": "green_box_geom",
+    "yellow_sphere": "yellow_sph_geom",
     "yellow_bottle": "yellow_bot_geom",
+    "purple_box": "purple_box_geom",
+    "orange_sphere": "orange_sph_geom",
+    "white_cylinder": "white_cyl_geom",
+    "black_box": "black_box_geom",
+    "purple_cylinder": "purple_cyl_geom",
+    "orange_box": "orange_box_geom",
 }
+
+# Conveyor feed geometry
+CONVEYOR_SPAWN = np.array([0.5, -0.55, 0.35])   # where items appear on the belt
+STAGING_POINT = np.array([0.5, -0.12, 0.33])    # where items settle for picking
+PARK_BASE = np.array([2.0, 2.0, 0.05])          # off-screen parking
 
 # Home configuration (from Menagerie)
 HOME_QPOS = np.array([0.0, 0.0, 0.0, -1.57079, 0.0, 1.57079, -0.7853])
@@ -210,6 +239,54 @@ class SimulationEnvironment:
         """Return mapping of geom ID -> object name for detection."""
         return self._object_geom_ids.copy()
 
+    def activate_grasp_weld(self, object_name: str) -> bool:
+        """
+        Activate the weld between the hand and the given object at their current
+        relative pose (represents a firm grasp). Returns True on success.
+        """
+        eq_name = f"grasp_{object_name}"
+        eq_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_EQUALITY, eq_name)
+        if eq_id < 0:
+            return False
+
+        hand_id = self._hand_body_id
+        obj_id = self._object_body_ids.get(object_name)
+        if obj_id is None:
+            return False
+
+        # Compute pose of object relative to hand: rel = hand^-1 * obj
+        p_h = self.data.xpos[hand_id].copy()
+        q_h = self.data.xquat[hand_id].copy()
+        p_o = self.data.xpos[obj_id].copy()
+        q_o = self.data.xquat[obj_id].copy()
+
+        q_h_inv = np.zeros(4)
+        mujoco.mju_negQuat(q_h_inv, q_h)
+        dp = p_o - p_h
+        rel_pos = np.zeros(3)
+        mujoco.mju_rotVecQuat(rel_pos, dp, q_h_inv)
+        rel_quat = np.zeros(4)
+        mujoco.mju_mulQuat(rel_quat, q_h_inv, q_o)
+
+        # Weld eq_data layout: [anchor(3), relpose pos(3) + quat(4), torquescale(1)]
+        data = np.zeros(11)
+        data[0:3] = 0.0            # anchor at body2 origin
+        data[3:6] = rel_pos        # relative position
+        data[6:10] = rel_quat      # relative orientation
+        data[10] = 1.0             # torque scale
+        self.model.eq_data[eq_id] = data
+        self.data.eq_active[eq_id] = 1
+        mujoco.mj_forward(self.model, self.data)
+        return True
+
+    def release_all_welds(self) -> None:
+        """Deactivate every grasp weld (release any held object)."""
+        for name in self._object_joint_ids.keys():
+            eq_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_EQUALITY, f"grasp_{name}")
+            if eq_id >= 0:
+                self.data.eq_active[eq_id] = 0
+        mujoco.mj_forward(self.model, self.data)
+
     def get_ee_position(self) -> np.ndarray:
         return self.data.xpos[self._hand_body_id].copy()
 
@@ -249,60 +326,116 @@ class SimulationEnvironment:
             return self.data.xpos[body_id].copy()
         return None
 
-    def reset_objects(self, randomize: bool = True, num_objects: int = 8) -> Dict[str, np.ndarray]:
-        """Reset product positions on the table."""
-        table_z = 0.295 + 0.035  # table surface + half object (bigger objects)
-        x_range = (0.38, 0.62)
-        y_range = (-0.16, 0.16)
-        min_separation = 0.14  # More spacing so objects don't merge in detection
-
-        all_names = list(self._object_joint_ids.keys())
-
-        # Pick a diverse subset: one from each color if possible
-        if num_objects <= 4:
-            # Use the 4 primary distinct-color products
-            active_names = ["red_box", "blue_box", "green_cylinder", "yellow_sphere"][:num_objects]
-        else:
-            active_names = all_names[:num_objects]
-
-        if randomize:
-            positions = self._generate_random_positions(len(active_names), x_range, y_range, min_separation)
-        else:
-            positions = [
-                np.array([0.42, -0.12]), np.array([0.58, 0.12]),
-                np.array([0.42, 0.12]), np.array([0.58, -0.12]),
-                np.array([0.5, 0.0]), np.array([0.5, 0.15]),
-                np.array([0.45, -0.05]), np.array([0.55, 0.05]),
-            ][:len(active_names)]
-
-        # Place active objects on the table
-        for i, name in enumerate(active_names):
+    def park_all_objects(self) -> None:
+        """Move every product off-screen (resting on the floor, far from the cell)."""
+        for idx, name in enumerate(self._object_joint_ids.keys()):
             jid = self._object_joint_ids[name]
             addr = self.model.jnt_qposadr[jid]
-            self.data.qpos[addr:addr+3] = [positions[i][0], positions[i][1], table_z]
+            self.data.qpos[addr:addr+3] = [PARK_BASE[0] + idx * 0.15, PARK_BASE[1], PARK_BASE[2]]
             self.data.qpos[addr+3:addr+7] = [1, 0, 0, 0]
             dof_addr = self.model.jnt_dofadr[jid]
             self.data.qvel[dof_addr:dof_addr+6] = 0
-
-        # Park unused objects far off-screen (under the floor, out of camera view)
-        for name in all_names:
-            if name not in active_names:
-                jid = self._object_joint_ids[name]
-                addr = self.model.jnt_qposadr[jid]
-                # Hide far away below the floor
-                idx = all_names.index(name)
-                self.data.qpos[addr:addr+3] = [2.0 + idx * 0.1, 2.0, -0.5]
-                self.data.qpos[addr+3:addr+7] = [1, 0, 0, 0]
-                dof_addr = self.model.jnt_dofadr[jid]
-                self.data.qvel[dof_addr:dof_addr+6] = 0
-
         mujoco.mj_forward(self.model, self.data)
-        for _ in range(100):
+
+    def park_object(self, name: str) -> None:
+        """Move a single product off-screen (used to clear a failed pick)."""
+        jid = self._object_joint_ids.get(name)
+        if jid is None:
+            return
+        self.release_all_welds()
+        idx = list(self._object_joint_ids.keys()).index(name)
+        addr = self.model.jnt_qposadr[jid]
+        self.data.qpos[addr:addr+3] = [PARK_BASE[0] + idx * 0.15, PARK_BASE[1], PARK_BASE[2]]
+        self.data.qpos[addr+3:addr+7] = [1, 0, 0, 0]
+        dof_addr = self.model.jnt_dofadr[jid]
+        self.data.qvel[dof_addr:dof_addr+6] = 0
+        mujoco.mj_forward(self.model, self.data)
+
+    def build_episode_queue(self, num_objects: int, unknown_ratio: float = 0.3) -> List[str]:
+        """
+        Build a randomized queue of products for one episode.
+        A fraction are unknown items (destined for the trash bin).
+        """
+        num_unknown = int(round(num_objects * unknown_ratio))
+        num_unknown = min(num_unknown, len(UNKNOWN_OBJECTS))
+        num_known = num_objects - num_unknown
+
+        known = list(np.random.choice(KNOWN_OBJECTS, size=min(num_known, len(KNOWN_OBJECTS)),
+                                      replace=False))
+        unknown = list(np.random.choice(UNKNOWN_OBJECTS, size=num_unknown, replace=False))
+        queue = known + unknown
+        np.random.shuffle(queue)
+        return queue
+
+    def feed_object(self, name: str, render: bool = True) -> np.ndarray:
+        """
+        Deliver one product via the conveyor: spawn it at the belt entrance and
+        slide it forward (+Y) into the staging area where the arm can pick it.
+        Returns the settled world position.
+        """
+        jid = self._object_joint_ids[name]
+        addr = self.model.jnt_qposadr[jid]
+        dof_addr = self.model.jnt_dofadr[jid]
+
+        # Spawn on the belt with a small random x offset for variety
+        x0 = 0.5 + np.random.uniform(-0.03, 0.03)
+        self.data.qpos[addr:addr+3] = [x0, CONVEYOR_SPAWN[1], CONVEYOR_SPAWN[2]]
+        # Random yaw so items arrive in varied orientations
+        yaw = np.random.uniform(0, 2 * np.pi)
+        self.data.qpos[addr+3:addr+7] = [np.cos(yaw/2), 0, 0, np.sin(yaw/2)]
+        self.data.qvel[dof_addr:dof_addr+6] = 0
+        mujoco.mj_forward(self.model, self.data)
+
+        belt_speed = 0.45  # m/s forward
+        body_id = self._object_body_ids[name]
+        reached = False
+
+        # Slide forward until the item reaches the staging line (y >= STAGING_POINT[1])
+        for step in range(700):
+            ypos = self.data.xpos[body_id][1]
+            if ypos < STAGING_POINT[1] - 0.02:
+                # Drive the belt: keep forward velocity while on the belt/table
+                self.data.qvel[dof_addr + 1] = belt_speed
+            # Let physics run
+            mujoco.mj_step(self.model, self.data)
+            if render and self.viewer is not None and step % 8 == 0:
+                self.viewer.sync()
+                time.sleep(0.01)
+            if self.data.xpos[body_id][1] >= STAGING_POINT[1] - 0.02:
+                reached = True
+                break
+
+        # Fallback: if the belt didn't carry it all the way, place it at staging
+        # so the item is never left stranded mid-belt.
+        if not reached:
+            self.data.qpos[addr:addr+3] = STAGING_POINT
+            self.data.qvel[dof_addr:dof_addr+6] = 0
+            mujoco.mj_forward(self.model, self.data)
+
+        # Stop the item at the staging gate and let it settle to rest so the
+        # perceived position is stable for grasping.
+        self.data.qvel[dof_addr:dof_addr+6] = 0
+        mujoco.mj_forward(self.model, self.data)
+        for step in range(200):
+            mujoco.mj_step(self.model, self.data)
+            # Damp any residual drift/rolling so it comes fully to rest
+            if step % 20 == 0:
+                self.data.qvel[dof_addr:dof_addr+6] *= 0.3
+            if render and self.viewer is not None and step % 10 == 0:
+                self.viewer.sync()
+                time.sleep(0.005)
+        self.data.qvel[dof_addr:dof_addr+6] = 0
+        mujoco.mj_forward(self.model, self.data)
+
+        return self.data.xpos[body_id].copy()
+
+    def reset_objects(self, randomize: bool = True, num_objects: int = 8) -> Dict[str, np.ndarray]:
+        """Compatibility shim: park everything and return empty (feed happens per-item)."""
+        self.park_all_objects()
+        for _ in range(50):
             mujoco.mj_step(self.model, self.data)
         mujoco.mj_forward(self.model, self.data)
-
-        # Return only active object positions
-        return {name: self.data.xpos[self._object_body_ids[name]].copy() for name in active_names}
+        return {}
 
     def _generate_random_positions(self, count, x_range, y_range, min_sep):
         positions = []

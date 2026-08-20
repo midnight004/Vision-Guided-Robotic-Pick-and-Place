@@ -1,9 +1,9 @@
-<mujoco model="factory_pick_and_place">
+<mujoco model="factory_sorting_line">
   <include file="franka/panda.xml"/>
 
   <compiler angle="radian" meshdir="franka/assets"/>
 
-  <option timestep="0.002" gravity="0 0 -9.81" integrator="implicitfast" cone="elliptic" impratio="10"/>
+  <option timestep="0.002" gravity="0 0 -9.81" integrator="implicitfast" cone="pyramidal" impratio="1"/>
 
   <visual>
     <headlight diffuse="0.3 0.3 0.3" ambient="0.35 0.35 0.35" specular="0 0 0"/>
@@ -15,167 +15,208 @@
     <texture type="skybox" builtin="gradient" rgb1="0.3 0.5 0.7" rgb2="0 0 0" width="512" height="3072"/>
     <texture name="floor_tex" type="2d" builtin="checker" rgb1="0.2 0.2 0.2" rgb2="0.15 0.15 0.15" width="512" height="512"/>
     <texture name="table_tex" type="2d" builtin="flat" rgb1="0.35 0.35 0.4" width="128" height="128"/>
-    <texture name="belt_tex" type="2d" builtin="flat" rgb1="0.15 0.15 0.18" width="128" height="128"/>
+    <texture name="belt_tex" type="2d" builtin="checker" rgb1="0.12 0.12 0.14" rgb2="0.18 0.18 0.2" width="128" height="128"/>
 
     <material name="floor_mat" texture="floor_tex" texrepeat="10 10" specular="0.2" reflectance="0.2"/>
     <material name="table_mat" texture="table_tex" specular="0.3" shininess="0.5"/>
-    <material name="belt_mat" texture="belt_tex" specular="0.1"/>
+    <material name="belt_mat" texture="belt_tex" texrepeat="8 3" specular="0.1"/>
     <material name="metal" rgba="0.6 0.6 0.65 1" specular="0.8" shininess="0.9" reflectance="0.3"/>
     <material name="bin_red" rgba="0.75 0.12 0.1 1" specular="0.2"/>
     <material name="bin_blue" rgba="0.1 0.15 0.75 1" specular="0.2"/>
     <material name="bin_green" rgba="0.1 0.65 0.15 1" specular="0.2"/>
     <material name="bin_yellow" rgba="0.85 0.75 0.1 1" specular="0.2"/>
+    <material name="bin_trash" rgba="0.3 0.3 0.32 1" specular="0.3"/>
   </asset>
 
   <worldbody>
-    <!-- Factory lighting (moderate to avoid overexposing object colors) -->
-    <light name="ceiling1" pos="0.4 0 1.8" dir="0 0 -1" diffuse="0.45 0.45 0.45" specular="0.05 0.05 0.05" castshadow="true"/>
-    <light name="ceiling2" pos="0.4 -0.5 1.5" dir="0 0.3 -1" diffuse="0.25 0.25 0.25" specular="0.0 0.0 0.0" castshadow="false"/>
-    <light name="ceiling3" pos="0.4 0.5 1.5" dir="0 -0.3 -1" diffuse="0.25 0.25 0.25" specular="0.0 0.0 0.0" castshadow="false"/>
+    <!-- Factory lighting (diffuse only, no specular, to keep object colors accurate) -->
+    <light name="ceiling1" pos="0.5 0 1.8" dir="0 0 -1" diffuse="0.4 0.4 0.4" specular="0 0 0" castshadow="true"/>
+    <light name="ceiling2" pos="0.5 -0.5 1.5" dir="0 0.3 -1" diffuse="0.3 0.3 0.3" specular="0 0 0" castshadow="false"/>
+    <light name="ceiling3" pos="0.5 0.5 1.5" dir="0 -0.3 -1" diffuse="0.3 0.3 0.3" specular="0 0 0" castshadow="false"/>
 
-    <!-- Floor -->
     <geom name="floor" type="plane" size="3 3 0.01" material="floor_mat"/>
 
-    <!-- Cameras -->
-    <camera name="overhead_cam" pos="0.5 0 1.2" xyaxes="1 0 0 0 1 0" fovy="58"/>
-    <camera name="side_cam" pos="1.0 -0.9 0.7" xyaxes="0.7 1 0 -0.2 0 1"/>
-    <camera name="front_cam" pos="0.5 -0.8 0.6" xyaxes="1 0 0 0 0.4 1"/>
+    <!-- Cameras: overhead for perception, side for viewing -->
+    <camera name="overhead_cam" pos="0.5 -0.05 1.2" xyaxes="1 0 0 0 1 0" fovy="58"/>
+    <camera name="side_cam" pos="1.1 -0.9 0.75" xyaxes="0.7 1 0 -0.2 0 1"/>
 
     <!-- ============ WORK TABLE ============ -->
     <body name="table" pos="0.5 0 0.28">
-      <geom name="table_top" type="box" size="0.35 0.35 0.015" material="table_mat" mass="80"
+      <geom name="table_top" type="box" size="0.38 0.38 0.015" material="table_mat" mass="80"
             friction="0.8 0.01 0.001"/>
-      <!-- Steel legs -->
-      <geom type="cylinder" size="0.02 0.13" pos="0.28 0.28 -0.145" material="metal"/>
-      <geom type="cylinder" size="0.02 0.13" pos="-0.28 0.28 -0.145" material="metal"/>
-      <geom type="cylinder" size="0.02 0.13" pos="0.28 -0.28 -0.145" material="metal"/>
-      <geom type="cylinder" size="0.02 0.13" pos="-0.28 -0.28 -0.145" material="metal"/>
+      <geom type="cylinder" size="0.02 0.13" pos="0.30 0.30 -0.145" material="metal"/>
+      <geom type="cylinder" size="0.02 0.13" pos="-0.30 0.30 -0.145" material="metal"/>
+      <geom type="cylinder" size="0.02 0.13" pos="0.30 -0.30 -0.145" material="metal"/>
+      <geom type="cylinder" size="0.02 0.13" pos="-0.30 -0.30 -0.145" material="metal"/>
     </body>
 
-    <!-- ============ CONVEYOR BELT ============ -->
-    <body name="conveyor" pos="0.5 -0.55 0.28">
-      <!-- Belt surface (slightly below table for feeding) -->
-      <geom name="belt_surface" type="box" size="0.35 0.08 0.008" material="belt_mat" mass="20"
-            friction="0.5 0.005 0.001"/>
-      <!-- Side rails -->
-      <geom type="box" size="0.35 0.005 0.025" pos="0 0.075 0.02" material="metal"/>
-      <geom type="box" size="0.35 0.005 0.025" pos="0 -0.075 0.02" material="metal"/>
-      <!-- Support frame -->
-      <geom type="cylinder" size="0.015 0.13" pos="0.3 0.06 -0.14" material="metal"/>
-      <geom type="cylinder" size="0.015 0.13" pos="-0.3 0.06 -0.14" material="metal"/>
-      <geom type="cylinder" size="0.015 0.13" pos="0.3 -0.06 -0.14" material="metal"/>
-      <geom type="cylinder" size="0.015 0.13" pos="-0.3 -0.06 -0.14" material="metal"/>
-      <!-- Roller ends (visual) -->
-      <geom type="cylinder" size="0.025 0.07" pos="0.33 0 0" quat="0.707 0.707 0 0" material="metal" contype="0" conaffinity="0"/>
-      <geom type="cylinder" size="0.025 0.07" pos="-0.33 0 0" quat="0.707 0.707 0 0" material="metal" contype="0" conaffinity="0"/>
+    <!-- ============ CONVEYOR BELT (feeds items from front into staging) ============ -->
+    <!-- Belt top aligned with table top (z=0.295) for smooth transfer -->
+    <body name="conveyor" pos="0.5 -0.62 0.287">
+      <geom name="belt_surface" type="box" size="0.09 0.28 0.008" material="belt_mat" mass="30"
+            friction="0.4 0.005 0.0001"/>
+      <!-- Side rails to keep items centered -->
+      <geom type="box" size="0.006 0.28 0.03" pos="0.096 0 0.03" material="metal"/>
+      <geom type="box" size="0.006 0.28 0.03" pos="-0.096 0 0.03" material="metal"/>
+      <!-- Legs -->
+      <geom type="cylinder" size="0.015 0.14" pos="0.07 0.25 -0.15" material="metal"/>
+      <geom type="cylinder" size="0.015 0.14" pos="-0.07 0.25 -0.15" material="metal"/>
+      <geom type="cylinder" size="0.015 0.14" pos="0.07 -0.25 -0.15" material="metal"/>
+      <geom type="cylinder" size="0.015 0.14" pos="-0.07 -0.25 -0.15" material="metal"/>
+      <!-- Rollers (visual) -->
+      <geom type="cylinder" size="0.02 0.09" pos="0 0.27 0" quat="0.707 0 0.707 0" material="metal" contype="0" conaffinity="0"/>
+      <geom type="cylinder" size="0.02 0.09" pos="0 -0.27 0" quat="0.707 0 0.707 0" material="metal" contype="0" conaffinity="0"/>
     </body>
 
-    <!-- ============ SORTING BINS (on table edges) ============ -->
-    <!-- Red bin (left edge) -->
-    <body name="bin_red" pos="0.35 -0.28 0.30">
-      <geom type="box" size="0.05 0.05 0.003" material="bin_red"/>
-      <geom type="box" size="0.05 0.004 0.035" pos="0 0.046 0.035" material="bin_red"/>
-      <geom type="box" size="0.05 0.004 0.035" pos="0 -0.046 0.035" material="bin_red"/>
-      <geom type="box" size="0.004 0.05 0.035" pos="0.046 0 0.035" material="bin_red"/>
-      <geom type="box" size="0.004 0.05 0.035" pos="-0.046 0 0.035" material="bin_red"/>
+    <!-- ============ SORTING BINS (bigger, 5 incl. trash) ============ -->
+    <!-- Layout: 4 corners + trash at back-center. Front-center clear for conveyor feed. -->
+    <body name="bin_red" pos="0.30 -0.30 0.30">
+      <geom type="box" size="0.08 0.08 0.003" material="bin_red"/>
+      <geom type="box" size="0.08 0.004 0.05" pos="0 0.076 0.05" material="bin_red"/>
+      <geom type="box" size="0.08 0.004 0.05" pos="0 -0.076 0.05" material="bin_red"/>
+      <geom type="box" size="0.004 0.08 0.05" pos="0.076 0 0.05" material="bin_red"/>
+      <geom type="box" size="0.004 0.08 0.05" pos="-0.076 0 0.05" material="bin_red"/>
     </body>
-    <!-- Blue bin (right edge) -->
-    <body name="bin_blue" pos="0.35 0.28 0.30">
-      <geom type="box" size="0.05 0.05 0.003" material="bin_blue"/>
-      <geom type="box" size="0.05 0.004 0.035" pos="0 0.046 0.035" material="bin_blue"/>
-      <geom type="box" size="0.05 0.004 0.035" pos="0 -0.046 0.035" material="bin_blue"/>
-      <geom type="box" size="0.004 0.05 0.035" pos="0.046 0 0.035" material="bin_blue"/>
-      <geom type="box" size="0.004 0.05 0.035" pos="-0.046 0 0.035" material="bin_blue"/>
+    <body name="bin_blue" pos="0.30 0.30 0.30">
+      <geom type="box" size="0.08 0.08 0.003" material="bin_blue"/>
+      <geom type="box" size="0.08 0.004 0.05" pos="0 0.076 0.05" material="bin_blue"/>
+      <geom type="box" size="0.08 0.004 0.05" pos="0 -0.076 0.05" material="bin_blue"/>
+      <geom type="box" size="0.004 0.08 0.05" pos="0.076 0 0.05" material="bin_blue"/>
+      <geom type="box" size="0.004 0.08 0.05" pos="-0.076 0 0.05" material="bin_blue"/>
     </body>
-    <!-- Green bin (far left) -->
-    <body name="bin_green" pos="0.6 -0.28 0.30">
-      <geom type="box" size="0.05 0.05 0.003" material="bin_green"/>
-      <geom type="box" size="0.05 0.004 0.035" pos="0 0.046 0.035" material="bin_green"/>
-      <geom type="box" size="0.05 0.004 0.035" pos="0 -0.046 0.035" material="bin_green"/>
-      <geom type="box" size="0.004 0.05 0.035" pos="0.046 0 0.035" material="bin_green"/>
-      <geom type="box" size="0.004 0.05 0.035" pos="-0.046 0 0.035" material="bin_green"/>
+    <body name="bin_green" pos="0.62 -0.30 0.30">
+      <geom type="box" size="0.08 0.08 0.003" material="bin_green"/>
+      <geom type="box" size="0.08 0.004 0.05" pos="0 0.076 0.05" material="bin_green"/>
+      <geom type="box" size="0.08 0.004 0.05" pos="0 -0.076 0.05" material="bin_green"/>
+      <geom type="box" size="0.004 0.08 0.05" pos="0.076 0 0.05" material="bin_green"/>
+      <geom type="box" size="0.004 0.08 0.05" pos="-0.076 0 0.05" material="bin_green"/>
     </body>
-    <!-- Yellow bin (far right) -->
-    <body name="bin_yellow" pos="0.6 0.28 0.30">
-      <geom type="box" size="0.05 0.05 0.003" material="bin_yellow"/>
-      <geom type="box" size="0.05 0.004 0.035" pos="0 0.046 0.035" material="bin_yellow"/>
-      <geom type="box" size="0.05 0.004 0.035" pos="0 -0.046 0.035" material="bin_yellow"/>
-      <geom type="box" size="0.004 0.05 0.035" pos="0.046 0 0.035" material="bin_yellow"/>
-      <geom type="box" size="0.004 0.05 0.035" pos="-0.046 0 0.035" material="bin_yellow"/>
+    <body name="bin_yellow" pos="0.62 0.30 0.30">
+      <geom type="box" size="0.08 0.08 0.003" material="bin_yellow"/>
+      <geom type="box" size="0.08 0.004 0.05" pos="0 0.076 0.05" material="bin_yellow"/>
+      <geom type="box" size="0.08 0.004 0.05" pos="0 -0.076 0.05" material="bin_yellow"/>
+      <geom type="box" size="0.004 0.08 0.05" pos="0.076 0 0.05" material="bin_yellow"/>
+      <geom type="box" size="0.004 0.08 0.05" pos="-0.076 0 0.05" material="bin_yellow"/>
+    </body>
+    <!-- Trash / reject bin (unknown items) -->
+    <body name="bin_trash" pos="0.46 0.31 0.30">
+      <geom type="box" size="0.07 0.07 0.003" material="bin_trash"/>
+      <geom type="box" size="0.07 0.004 0.05" pos="0 0.066 0.05" material="bin_trash"/>
+      <geom type="box" size="0.07 0.004 0.05" pos="0 -0.066 0.05" material="bin_trash"/>
+      <geom type="box" size="0.004 0.07 0.05" pos="0.066 0 0.05" material="bin_trash"/>
+      <geom type="box" size="0.004 0.07 0.05" pos="-0.066 0 0.05" material="bin_trash"/>
     </body>
 
-    <!-- ============ PRODUCTS (8 varied items, factory-sized) ============ -->
-    <!-- Red cube -->
-    <body name="red_box" pos="0.4 -0.1 0.34">
+    <!-- ============ PRODUCT POOL (14 items: 8 known + 6 unknown) ============ -->
+    <!-- All parked off-screen by default; episodes activate a random subset. -->
+    <!-- Known colors (red/blue/green/yellow) -->
+    <body name="red_box" pos="2.0 2.0 -0.5">
       <joint name="red_box_joint" type="free"/>
-      <geom name="red_box_geom" type="box" size="0.03 0.03 0.03" rgba="0.88 0.12 0.08 1" mass="0.05"
+      <geom name="red_box_geom" type="box" size="0.03 0.03 0.03" rgba="0.9 0.04 0.04 1" mass="0.05"
             condim="4" friction="1.5 0.01 0.001" solref="0.01 1" solimp="0.95 0.99 0.001"/>
     </body>
-    <!-- Blue cube -->
-    <body name="blue_box" pos="0.55 0.05 0.34">
-      <joint name="blue_box_joint" type="free"/>
-      <geom name="blue_box_geom" type="box" size="0.03 0.03 0.03" rgba="0.08 0.12 0.88 1" mass="0.05"
-            condim="4" friction="1.5 0.01 0.001" solref="0.01 1" solimp="0.95 0.99 0.001"/>
-    </body>
-    <!-- Green cylinder (bottle-like) -->
-    <body name="green_cylinder" pos="0.45 0.1 0.34">
-      <joint name="green_cyl_joint" type="free"/>
-      <geom name="green_cyl_geom" type="cylinder" size="0.025 0.035" rgba="0.08 0.78 0.12 1" mass="0.045"
-            condim="4" friction="1.5 0.01 0.001" solref="0.01 1" solimp="0.95 0.99 0.001"/>
-    </body>
-    <!-- Yellow sphere (ball) -->
-    <body name="yellow_sphere" pos="0.5 -0.05 0.34">
-      <joint name="yellow_sph_joint" type="free"/>
-      <geom name="yellow_sph_geom" type="sphere" size="0.03" rgba="0.95 0.82 0.08 1" mass="0.04"
-            condim="4" friction="1.5 0.01 0.001" solref="0.01 1" solimp="0.95 0.99 0.001"/>
-    </body>
-    <!-- Red cylinder (can) -->
-    <body name="red_can" pos="0.6 -0.1 0.34">
+    <body name="red_can" pos="2.15 2.0 -0.5">
       <joint name="red_can_joint" type="free"/>
       <geom name="red_can_geom" type="cylinder" size="0.026 0.04" rgba="0.82 0.15 0.1 1" mass="0.05"
             condim="4" friction="1.5 0.01 0.001" solref="0.01 1" solimp="0.95 0.99 0.001"/>
     </body>
-    <!-- Blue capsule (pill bottle) -->
-    <body name="blue_capsule" pos="0.35 0.05 0.34">
+    <body name="blue_box" pos="2.30 2.0 -0.5">
+      <joint name="blue_box_joint" type="free"/>
+      <geom name="blue_box_geom" type="box" size="0.03 0.03 0.03" rgba="0.04 0.08 0.9 1" mass="0.05"
+            condim="4" friction="1.5 0.01 0.001" solref="0.01 1" solimp="0.95 0.99 0.001"/>
+    </body>
+    <body name="blue_capsule" pos="2.45 2.0 -0.5">
       <joint name="blue_cap_joint" type="free"/>
-      <geom name="blue_cap_geom" type="capsule" size="0.022 0.03" rgba="0.1 0.2 0.85 1" mass="0.04"
+      <geom name="blue_cap_geom" type="capsule" size="0.024 0.03" rgba="0.1 0.2 0.85 1" mass="0.04"
             condim="4" friction="1.5 0.01 0.001" solref="0.01 1" solimp="0.95 0.99 0.001"/>
     </body>
-    <!-- Green box (package) -->
-    <body name="green_box" pos="0.55 -0.15 0.34">
+    <body name="green_cylinder" pos="2.60 2.0 -0.5">
+      <joint name="green_cyl_joint" type="free"/>
+      <geom name="green_cyl_geom" type="cylinder" size="0.026 0.035" rgba="0.08 0.78 0.12 1" mass="0.045"
+            condim="4" friction="1.5 0.01 0.001" solref="0.01 1" solimp="0.95 0.99 0.001"/>
+    </body>
+    <body name="green_box" pos="2.75 2.0 -0.5">
       <joint name="green_box_joint" type="free"/>
-      <geom name="green_box_geom" type="box" size="0.032 0.026 0.022" rgba="0.12 0.72 0.18 1" mass="0.045"
+      <geom name="green_box_geom" type="box" size="0.032 0.028 0.026" rgba="0.05 0.75 0.1 1" mass="0.045"
             condim="4" friction="1.5 0.01 0.001" solref="0.01 1" solimp="0.95 0.99 0.001"/>
     </body>
-    <!-- Yellow cylinder (small bottle) -->
-    <body name="yellow_bottle" pos="0.4 0.15 0.34">
+    <body name="yellow_sphere" pos="2.90 2.0 -0.5">
+      <joint name="yellow_sph_joint" type="free"/>
+      <geom name="yellow_sph_geom" type="sphere" size="0.03" rgba="0.95 0.82 0.08 1" mass="0.04"
+            condim="6" friction="1.5 0.05 0.02" solref="0.01 1" solimp="0.95 0.99 0.001"/>
+    </body>
+    <body name="yellow_bottle" pos="3.05 2.0 -0.5">
       <joint name="yellow_bot_joint" type="free"/>
       <geom name="yellow_bot_geom" type="cylinder" size="0.024 0.035" rgba="0.92 0.78 0.1 1" mass="0.04"
             condim="4" friction="1.5 0.01 0.001" solref="0.01 1" solimp="0.95 0.99 0.001"/>
     </body>
-
-    <!-- EE grasp site (added to the hand for IK targeting) -->
-    <frame name="grasp_site_frame" pos="0 0 0">
-      <!-- This is a world-level frame, we'll reference the hand body directly -->
-    </frame>
+    <!-- Unknown colors/shapes (go to trash) -->
+    <body name="purple_box" pos="3.20 2.0 -0.5">
+      <joint name="purple_box_joint" type="free"/>
+      <geom name="purple_box_geom" type="box" size="0.03 0.03 0.03" rgba="0.6 0.1 0.75 1" mass="0.05"
+            condim="4" friction="1.5 0.01 0.001" solref="0.01 1" solimp="0.95 0.99 0.001"/>
+    </body>
+    <body name="orange_sphere" pos="3.35 2.0 -0.5">
+      <joint name="orange_sph_joint" type="free"/>
+      <geom name="orange_sph_geom" type="sphere" size="0.03" rgba="0.95 0.5 0.05 1" mass="0.04"
+            condim="6" friction="1.5 0.05 0.02" solref="0.01 1" solimp="0.95 0.99 0.001"/>
+    </body>
+    <body name="white_cylinder" pos="3.50 2.0 -0.5">
+      <joint name="white_cyl_joint" type="free"/>
+      <geom name="white_cyl_geom" type="cylinder" size="0.026 0.035" rgba="0.92 0.92 0.92 1" mass="0.045"
+            condim="4" friction="1.5 0.01 0.001" solref="0.01 1" solimp="0.95 0.99 0.001"/>
+    </body>
+    <body name="black_box" pos="3.65 2.0 -0.5">
+      <joint name="black_box_joint" type="free"/>
+      <geom name="black_box_geom" type="box" size="0.03 0.03 0.03" rgba="0.12 0.12 0.12 1" mass="0.05"
+            condim="4" friction="1.5 0.01 0.001" solref="0.01 1" solimp="0.95 0.99 0.001"/>
+    </body>
+    <body name="purple_cylinder" pos="3.80 2.0 -0.5">
+      <joint name="purple_cyl_joint" type="free"/>
+      <geom name="purple_cyl_geom" type="cylinder" size="0.026 0.035" rgba="0.55 0.12 0.7 1" mass="0.045"
+            condim="4" friction="1.5 0.01 0.001" solref="0.01 1" solimp="0.95 0.99 0.001"/>
+    </body>
+    <body name="orange_box" pos="3.95 2.0 -0.5">
+      <joint name="orange_box_joint" type="free"/>
+      <geom name="orange_box_geom" type="box" size="0.03 0.028 0.026" rgba="0.95 0.45 0.05 1" mass="0.045"
+            condim="4" friction="1.5 0.01 0.001" solref="0.01 1" solimp="0.95 0.99 0.001"/>
+    </body>
   </worldbody>
 
-  <!-- Add a site to the hand for IK -->
+  <!-- Grasp welds: activated at runtime when the gripper closes on an object.
+       Represents a firm rigid grasp; deactivated on release. -->
+  <equality>
+    <weld name="grasp_red_box" body1="hand" body2="red_box" active="false" solref="0.02 1"/>
+    <weld name="grasp_red_can" body1="hand" body2="red_can" active="false" solref="0.02 1"/>
+    <weld name="grasp_blue_box" body1="hand" body2="blue_box" active="false" solref="0.02 1"/>
+    <weld name="grasp_blue_capsule" body1="hand" body2="blue_capsule" active="false" solref="0.02 1"/>
+    <weld name="grasp_green_cylinder" body1="hand" body2="green_cylinder" active="false" solref="0.02 1"/>
+    <weld name="grasp_green_box" body1="hand" body2="green_box" active="false" solref="0.02 1"/>
+    <weld name="grasp_yellow_sphere" body1="hand" body2="yellow_sphere" active="false" solref="0.02 1"/>
+    <weld name="grasp_yellow_bottle" body1="hand" body2="yellow_bottle" active="false" solref="0.02 1"/>
+    <weld name="grasp_purple_box" body1="hand" body2="purple_box" active="false" solref="0.02 1"/>
+    <weld name="grasp_orange_sphere" body1="hand" body2="orange_sphere" active="false" solref="0.02 1"/>
+    <weld name="grasp_white_cylinder" body1="hand" body2="white_cylinder" active="false" solref="0.02 1"/>
+    <weld name="grasp_black_box" body1="hand" body2="black_box" active="false" solref="0.02 1"/>
+    <weld name="grasp_purple_cylinder" body1="hand" body2="purple_cylinder" active="false" solref="0.02 1"/>
+    <weld name="grasp_orange_box" body1="hand" body2="orange_box" active="false" solref="0.02 1"/>
+  </equality>
+
   <sensor>
     <framepos name="ee_pos" objtype="body" objname="hand"/>
     <framequat name="ee_quat" objtype="body" objname="hand"/>
   </sensor>
 
   <keyframe>
-    <key name="factory_home" qpos="0 0 0 -1.57079 0 1.57079 -0.7853 0.04 0.04
-                            0.4 -0.1 0.33 1 0 0 0
-                            0.55 0.05 0.33 1 0 0 0
-                            0.45 0.1 0.33 1 0 0 0
-                            0.5 -0.05 0.33 1 0 0 0
-                            0.6 -0.1 0.33 1 0 0 0
-                            0.35 0.05 0.33 1 0 0 0
-                            0.55 -0.15 0.33 1 0 0 0
-                            0.4 0.15 0.33 1 0 0 0"
+    <key name="factory_home"
+         qpos="0 0 0 -1.57079 0 1.57079 -0.7853 0.04 0.04
+               2.0 2.0 0.05 1 0 0 0    2.15 2.0 0.05 1 0 0 0
+               2.30 2.0 0.05 1 0 0 0   2.45 2.0 0.05 1 0 0 0
+               2.60 2.0 0.05 1 0 0 0   2.75 2.0 0.05 1 0 0 0
+               2.90 2.0 0.05 1 0 0 0   3.05 2.0 0.05 1 0 0 0
+               3.20 2.0 0.05 1 0 0 0   3.35 2.0 0.05 1 0 0 0
+               3.50 2.0 0.05 1 0 0 0   3.65 2.0 0.05 1 0 0 0
+               3.80 2.0 0.05 1 0 0 0   3.95 2.0 0.05 1 0 0 0"
          ctrl="0 0 0 -1.57079 0 1.57079 -0.7853 255"/>
   </keyframe>
 </mujoco>

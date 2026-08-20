@@ -38,12 +38,13 @@ logger = setup_logger("detection")
 class Detection:
     """Single object detection result."""
     bbox: Tuple[int, int, int, int]  # (x1, y1, x2, y2)
-    class_name: str                   # Object class label
+    class_name: str                   # Color category: red/blue/green/yellow/unknown
     class_id: int                     # Numeric class ID
     confidence: float                 # Detection confidence [0, 1]
     center: Tuple[int, int]           # (cx, cy) pixel center
     area: int                         # Bounding box area in pixels
     color_hsv: Optional[Tuple[int, int, int]] = None  # Dominant HSV color
+    true_name: str = ""               # Ground-truth object name (eval/logging only)
     
     def to_dict(self) -> dict:
         return {
@@ -116,8 +117,8 @@ class ObjectDetector:
         self.custom_classes = self.config['classes']['custom_classes']
         self.num_classes = self.config['classes']['num_classes']
 
-        # Class id mapping
-        self.class_to_id = {v: k for k, v in self.custom_classes.items()}
+        # Color-category class IDs for the sorting task
+        self.class_to_id = {"red": 0, "blue": 1, "green": 2, "yellow": 3, "unknown": 4}
 
         # Performance tracking
         self.total_inferences = 0
@@ -270,42 +271,90 @@ class ObjectDetector:
     
     def _detect_with_segmentation(self, image: np.ndarray) -> List[Detection]:
         """
-        Detect objects using MuJoCo segmentation rendering for pixel-perfect masks.
-        Bounding boxes come from the object masks; this is the standard method for
-        generating ground-truth detection labels in simulation (and for training data).
+        Detect objects with segmentation for pixel-accurate masks, then classify
+        each object by its dominant COLOR from the RGB image. The color (not the
+        object's true identity) decides the sorting bin, so novel/unknown colors
+        are routed to the trash bin. This mirrors a real color-sorting vision system.
         """
         seg = self.sim_env.render_segmentation()  # (H,W) geom IDs
         geom_map = self.sim_env.get_object_geom_map()  # geom_id -> object_name
+        hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
 
         detections = []
-        min_area = 60  # pixels
+        min_area = 60
 
         for geom_id, obj_name in geom_map.items():
             mask = (seg == geom_id)
             count = int(np.sum(mask))
             if count < min_area:
-                continue  # Object not visible or too small
+                continue
 
             ys, xs = np.where(mask)
             x1, y1, x2, y2 = int(xs.min()), int(ys.min()), int(xs.max()), int(ys.max())
             cx, cy = (x1 + x2) // 2, (y1 + y2) // 2
             area = (x2 - x1) * (y2 - y1)
 
-            class_id = self.class_to_id.get(obj_name, 0)
-            # Confidence reflects how complete/large the visible mask is
+            # Classify by dominant color within the object mask
+            color_class = self._classify_color_from_mask(hsv, mask)
+            class_id = self.class_to_id.get(color_class, 99)
             fill = count / max(1, area)
             confidence = min(0.99, 0.85 + 0.14 * fill)
 
-            detections.append(Detection(
+            det = Detection(
                 bbox=(x1, y1, x2, y2),
-                class_name=obj_name,
+                class_name=color_class,  # 'red'/'blue'/'green'/'yellow'/'unknown'
                 class_id=class_id,
                 confidence=confidence,
                 center=(cx, cy),
                 area=int(area),
-            ))
+            )
+            det.true_name = obj_name  # ground truth (for evaluation/logging only)
+            detections.append(det)
 
         return detections
+
+    def _classify_color_from_mask(self, hsv: np.ndarray, mask: np.ndarray) -> str:
+        """Determine the dominant color category of the masked object pixels."""
+        obj_hsv = hsv[mask]
+        if obj_hsv.size == 0:
+            return "unknown"
+
+        h = obj_hsv[:, 0].astype(np.int32)
+        s = obj_hsv[:, 1].astype(np.int32)
+        v = obj_hsv[:, 2].astype(np.int32)
+
+        # Saturated, lit pixels carry color information
+        good = (s > 40) & (v > 25) & (v < 253)
+        n_good = int(np.sum(good))
+        # White/black/grey objects have few saturated pixels -> unknown (trash)
+        if n_good < 0.08 * len(h):
+            return "unknown"
+
+        hg = h[good]
+
+        def categorize(hue):
+            if hue <= 10 or hue >= 160:
+                return "red"
+            if 11 <= hue <= 23:
+                return "unknown"   # orange
+            if 24 <= hue <= 35:
+                return "yellow"
+            if 36 <= hue <= 85:
+                return "green"
+            if 86 <= hue <= 132:
+                return "blue"
+            return "unknown"       # purple / magenta
+
+        cats = {}
+        for hue in hg:
+            c = categorize(int(hue))
+            cats[c] = cats.get(c, 0) + 1
+
+        best = max(cats, key=cats.get)
+        # Winning category must hold a plurality of the colored pixels
+        if cats[best] < 0.45 * len(hg):
+            return "unknown"
+        return best
 
     def _detect_with_color_only(self, image: np.ndarray) -> List[Detection]:
         """

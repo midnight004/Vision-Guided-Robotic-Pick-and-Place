@@ -19,7 +19,7 @@ logger = setup_logger("gripper")
 
 OPEN_VALUE = 255.0    # Fully open
 CLOSED_VALUE = 0.0    # Fully closed (no object)
-GRASP_VALUE = 10.0    # Closed with force (squeeze on object)
+GRASP_VALUE = 0.0     # Fully close so fingers firmly squeeze the object
 
 
 class GripperController:
@@ -33,32 +33,59 @@ class GripperController:
         self.model = sim_env.model
         self.data = sim_env.data
         self.is_gripping = False
-        logger.info("Gripper initialized (real physics grasping)")
+        self.grasped_object = None
+        logger.info("Gripper initialized (contact-triggered weld grasp)")
 
     def open(self, steps: int = 150, render: bool = True) -> bool:
-        """Open gripper fully."""
+        """Open gripper and release any welded object."""
         logger.debug("Opening gripper")
+        self.sim.release_all_welds()
+        self.grasped_object = None
         self.sim.set_gripper(OPEN_VALUE)
         self.is_gripping = False
         self._animate(steps, render)
         return True
 
     def close(self, steps: int = 200, render: bool = True) -> bool:
-        """Close gripper with force to grasp object via friction."""
+        """Close gripper on the nearest object; weld it for a firm grasp."""
         logger.debug("Closing gripper")
-        # Close with firm force
         self.sim.set_gripper(GRASP_VALUE)
         self.is_gripping = True
         self._animate(steps, render)
 
-        # Check if we actually grasped something
+        # Identify the object between the fingers (closest to the hand)
+        grasped = self._nearest_object()
         width = self.sim.get_gripper_width()
-        if width > 0.005:  # Fingers didn't fully close -> object between them
-            logger.info(f"  GRASPED (finger width: {width*1000:.1f}mm)")
+        if grasped is not None:
+            self.sim.activate_grasp_weld(grasped)
+            self.grasped_object = grasped
+            logger.info(f"  GRASPED {grasped} (finger width: {width*1000:.1f}mm)")
             return True
         else:
-            logger.warning(f"  Grasp may be empty (width: {width*1000:.1f}mm)")
-            return True  # Still proceed
+            logger.warning(f"  Grasp empty (width: {width*1000:.1f}mm)")
+            return False
+
+    def _nearest_object(self, max_xy: float = 0.06, max_z: float = 0.14) -> Optional[str]:
+        """
+        Find the object between the fingers. The object center sits below the
+        hand's EE reference, so match on horizontal (xy) proximity within a
+        vertical window beneath the hand.
+        """
+        hand_pos = self.sim.get_ee_position()
+        best = None
+        bd = max_xy
+        for name in self.sim._object_body_ids:
+            pos = self.sim.get_object_position(name)
+            if pos is None:
+                continue
+            dz = hand_pos[2] - pos[2]
+            if dz < -0.03 or dz > max_z:
+                continue
+            dxy = float(np.linalg.norm(pos[:2] - hand_pos[:2]))
+            if dxy < bd:
+                bd = dxy
+                best = name
+        return best
 
     def _animate(self, steps: int, render: bool) -> None:
         """Step physics with rendering for smooth visual."""
