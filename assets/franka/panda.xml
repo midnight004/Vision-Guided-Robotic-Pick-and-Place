@@ -132,6 +132,8 @@
       <geom mesh="link0_10" material="off_white" class="visual"/>
       <geom mesh="link0_11" material="white" class="visual"/>
       <geom mesh="link0_c" class="collision"/>
+      <geom name="rabah_plate" type="plane" size="0.09 0.04 0.01" pos="0 -0.131 0.14"
+            euler="1.5708 0 0" material="mat_rabah" contype="0" conaffinity="0" group="2"/>
       <body name="link1" pos="0 0 0.333">
         <inertial mass="4.970684" pos="0.003875 0.002081 -0.04762"
           fullinertia="0.70337 0.70661 0.0091170 -0.00013900 0.0067720 0.019169"/>

@@ -1,7 +1,7 @@
 <mujoco model="factory_sorting_line">
   <include file="franka/panda.xml"/>
 
-  <compiler angle="radian" meshdir="franka/assets"/>
+  <compiler angle="radian" meshdir="franka/assets" texturedir="textures"/>
 
   <option timestep="0.002" gravity="0 0 -9.81" integrator="implicitfast" cone="pyramidal" impratio="1"/>
 
@@ -26,6 +26,11 @@
     <material name="bin_green" rgba="0.1 0.65 0.15 1" specular="0.2"/>
     <material name="bin_yellow" rgba="0.85 0.75 0.1 1" specular="0.2"/>
     <material name="bin_trash" rgba="0.3 0.3 0.32 1" specular="0.3"/>
+
+    <texture name="tex_rabah" type="2d" file="label_rabah.png"/>
+    <texture name="tex_trash" type="2d" file="label_trash.png"/>
+    <material name="mat_rabah" texture="tex_rabah" texrepeat="1 1" texuniform="false" specular="0.1"/>
+    <material name="mat_trash" texture="tex_trash" texrepeat="1 1" texuniform="false" specular="0.1"/>
   </asset>
 
   <worldbody>
@@ -105,6 +110,8 @@
       <geom type="box" size="0.07 0.004 0.05" pos="0 -0.066 0.05" material="bin_trash"/>
       <geom type="box" size="0.004 0.07 0.05" pos="0.066 0 0.05" material="bin_trash"/>
       <geom type="box" size="0.004 0.07 0.05" pos="-0.066 0 0.05" material="bin_trash"/>
+      <geom name="trash_label" type="plane" size="0.058 0.03 0.01" pos="0 -0.0705 0.052"
+            euler="1.5708 0 0" material="mat_trash" contype="0" conaffinity="0"/>
     </body>
 
     <!-- ============ PRODUCT POOL (14 items: 8 known + 6 unknown) ============ -->
