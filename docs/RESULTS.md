@@ -104,19 +104,23 @@ See `docs/figures/fig_robustness.png`.
 
 ## Large-scale benchmark (Phase 8, 1000+ attempts)
 
-Segmentation backend, 170 episodes (1020 items), seed 1:
+Segmentation backend, 170 episodes (1020 items), seed 1
+(`results/experiments/seg_1000.json`):
 
 | Metric | Value |
 |--------|-------|
-| Detection rate | _see results/experiments/seg_1000.json_ |
-| Class accuracy | _(filled after run)_ |
-| Pick / Place success | _(filled after run)_ |
-| End-to-end | _(filled after run)_ |
-| Failure categories | _(filled after run)_ |
+| Detection rate | 100.0% |
+| Class accuracy | 99.0% |
+| Pick success | 98.7% |
+| Place success | 98.5% |
+| End-to-end (correct bin) | 96.3% (982/1020) |
+| Localization MAE (3D) | 2.99 cm |
+| Failure categories | placement 15, motion/grasp 13, classification 10 |
 
-(The 100-episode results above are the quick benchmark; this 1020-item run is
-the larger benchmark. The YOLO backend can be run at the same scale with
-`--backend yolo`.)
+The reference pipeline holds its ~96% end-to-end performance over 1020
+manipulation attempts, confirming the baseline is stable at scale and was not
+regressed by the upgrade. The 100-episode results above are the quick
+benchmark. The YOLO backend can be run at the same scale with `--backend yolo`.
 
 ## Reproduction
 
